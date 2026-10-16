@@ -2310,14 +2310,43 @@ export const RoomsView: React.FC = () => {
               </div>
 
               {/* UC-PH-14: Tự động hủy kế hoạch trả phòng khi hợp đồng tiếp tục thuê có hiệu lực */}
-              <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5 text-xs text-blue-950">
-                <div className="flex items-center gap-1.5 font-bold text-blue-900">
-                  <RotateCcw className="w-4 h-4 text-blue-700" />
-                  <span>UC-PH-14: Hủy kế hoạch trả phòng tự động theo BR-UC.PH.14-02</span>
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 text-xs text-blue-950">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                    <RotateCcw className="w-4 h-4 text-blue-700" />
+                    <span>UC-PH-14: Hủy kế hoạch trả phòng tự động theo BR-UC.PH.14-02</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                    Tự động đồng bộ từ UC-HDT-07
+                  </span>
                 </div>
                 <p className="text-[11px] text-blue-900 leading-relaxed">
                   Khi hợp đồng tiếp tục thuê đã ký và có hiệu lực theo UC-HDT-07, hệ thống <strong>tự động hủy kế hoạch trả cũ</strong>, chuyển kết quả sang <em>Đã hủy do gia hạn</em> và đưa/giữ phòng ở trạng thái <strong>Đang thuê</strong>. User chỉ xem kết quả tự hủy, không có nút hủy thủ công theo BR-UC.PH.14-07.
                 </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-blue-200 text-[11px]">
+                  <span className="text-slate-600">
+                    Kiểm tra đồng bộ hợp đồng nối tiếp &amp; kế hoạch trả (BR-UC.PH.14-06):
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {rooms.filter(r => r.expectedReturnDate).map(r => (
+                      <button
+                        key={r.roomCode}
+                        onClick={() => {
+                          const res = autoCancelReturnPlanPH14(r.roomCode);
+                          if (res.success) {
+                            showToast('success', res.message);
+                          } else {
+                            showToast('error', res.message);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 rounded font-semibold text-[11px] cursor-pointer"
+                        title={`Kiểm tra tự hủy kế hoạch trả của phòng ${r.roomCode} khi gia hạn`}
+                      >
+                        Kiểm tra tự hủy {r.roomCode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Bảng Lịch sử kế hoạch trả (ReturnPlanLog - BR-UC.PH.13-02: chỉ xem, không sửa) */}
