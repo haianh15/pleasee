@@ -641,6 +641,55 @@ export const INITIAL_INVENTORY_RECORDS: InventoryRecord[] = [
   }
 ];
 
+export const INITIAL_HANDOVER_CONDITIONS: HandoverCondition[] = [
+  {
+    id: 'hc_101',
+    roomCode: 'P.101',
+    expectedBatchCode: 'DOT-2026-K09',
+    linkedContractId: 'HD-101-2026',
+    linkedLeaseId: 'THUE-101-L1',
+    status: 'Đã hoàn tất',
+    scope: 'Hiện trạng chung của phòng',
+    description: 'Phòng sạch sẽ, sơn tường mới, sàn gạch men không trầy xước, cửa sổ và rèm che hoạt động trơn tru.',
+    photos: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500&auto=format&fit=crop'],
+    initialElectricityKwh: 1250,
+    initialWaterM3: 45,
+    meterElectricCode: 'CT-D-101',
+    meterWaterCode: 'CT-N-101',
+    meterPhotos: ['https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=500&auto=format&fit=crop'],
+    tenantChecked: true,
+    tenantCheckNote: 'Khách đã kiểm tra thực tế, không có ý kiến bổ sung',
+    tenantCheckSupplement: 'Không cần bổ sung',
+    evidenceStatus: 'Đã đính kèm',
+    handoverDoneAt: '2026-09-01T08:30:00Z',
+    loggedBy: 'Nguyễn Văn An',
+    version: 1
+  },
+  {
+    id: 'hc_303',
+    roomCode: 'P.303',
+    expectedBatchCode: 'DOT-2026-K10',
+    linkedContractId: 'HD-303-2026',
+    linkedLeaseId: 'THUE-303-L1',
+    status: 'Đã hoàn tất',
+    scope: 'Hiện trạng chung của phòng',
+    description: 'Phòng đầy đủ nội thất, đã vệ sinh trước khi giao, các thiết bị điện tử hoạt động tốt.',
+    photos: ['https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=500&auto=format&fit=crop'],
+    initialElectricityKwh: 3410,
+    initialWaterM3: 120,
+    meterElectricCode: 'CT-D-303',
+    meterWaterCode: 'CT-N-303',
+    meterPhotos: ['https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=500&auto=format&fit=crop'],
+    tenantChecked: true,
+    tenantCheckNote: 'Khách đã kiểm tra thực tế và xác nhận chỉ số đồng hồ',
+    tenantCheckSupplement: 'Không cần bổ sung',
+    evidenceStatus: 'Đã đính kèm',
+    handoverDoneAt: '2026-10-16T08:00:00Z',
+    loggedBy: 'Nguyễn Văn An',
+    version: 1
+  }
+];
+
 export const INITIAL_HANDOVER_REPORTS: HandoverReport[] = [
   {
     id: 'bb_101',

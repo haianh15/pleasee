@@ -52,6 +52,7 @@ import {
   INITIAL_CO_TENANTS,
   INITIAL_CONTRACTS,
   INITIAL_INVENTORY_RECORDS,
+  INITIAL_HANDOVER_CONDITIONS,
   INITIAL_HANDOVER_REPORTS,
   INITIAL_INCIDENTS,
   INITIAL_METER_READINGS,
@@ -169,12 +170,14 @@ interface AppContextType {
   // Handover & Assets (QT02)
   standardAssets: Asset[];
   inventoryRecords: InventoryRecord[];
+  handoverConditions: HandoverCondition[];
   handoverReports: HandoverReport[];
   incidents: AssetIncident[];
   returnInspections: ReturnInspection[];
   assetComparisonResults: AssetComparisonResult[];
   handoverReturnReports: HandoverReturnReport[];
   saveInventoryBG01: (record: InventoryRecord) => void;
+  saveHandoverConditionBG02: (condition: HandoverCondition) => { success: boolean; message: string };
   saveHandoverReportBG03: (report: HandoverReport) => void;
   confirmHandoverSignaturesBG03: (reportId: string, tenantSigned: boolean, ownerSigned: boolean, paperLocation?: string) => void;
   recordIncidentBG04: (incident: AssetIncident) => void;
@@ -313,6 +316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [leaseStartEvents, setLeaseStartEvents] = useState<LeaseStartEvent[]>(() => getStored('leaseStartEvents', INITIAL_LEASE_START_EVENTS));
 
   const [inventoryRecords, setInventoryRecords] = useState<InventoryRecord[]>(() => getStored('inventoryRecords', INITIAL_INVENTORY_RECORDS));
+  const [handoverConditions, setHandoverConditions] = useState<HandoverCondition[]>(() => getStored('handoverConditions', INITIAL_HANDOVER_CONDITIONS));
   const [handoverReports, setHandoverReports] = useState<HandoverReport[]>(() => getStored('handoverReports', INITIAL_HANDOVER_REPORTS));
   const [incidents, setIncidents] = useState<AssetIncident[]>(() => getStored('incidents', INITIAL_INCIDENTS));
   const [returnInspections, setReturnInspections] = useState<ReturnInspection[]>(() => getStored('returnInspections', INITIAL_RETURN_INSPECTIONS));
@@ -398,6 +402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { setStored('unfinishedHandoverLogs', unfinishedHandoverLogs); }, [unfinishedHandoverLogs]);
   useEffect(() => { setStored('leaseStartEvents', leaseStartEvents); }, [leaseStartEvents]);
   useEffect(() => { setStored('inventoryRecords', inventoryRecords); }, [inventoryRecords]);
+  useEffect(() => { setStored('handoverConditions', handoverConditions); }, [handoverConditions]);
   useEffect(() => { setStored('handoverReports', handoverReports); }, [handoverReports]);
   useEffect(() => { setStored('incidents', incidents); }, [incidents]);
   useEffect(() => { setStored('returnInspections', returnInspections); }, [returnInspections]);
@@ -1493,6 +1498,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logSecurity('INVENTORY_SAVED', `Room ${record.roomCode} inventory saved. Status: ${record.inventoryStatus}`);
   };
 
+  const saveHandoverConditionBG02 = (condition: HandoverCondition) => {
+    setHandoverConditions(prev => {
+      const idx = prev.findIndex(c => c.id === condition.id || (c.roomCode === condition.roomCode && c.scope === condition.scope && c.assetName === condition.assetName));
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = condition;
+        return updated;
+      }
+      return [condition, ...prev];
+    });
+    logSecurity('BG02_CONDITION_SAVED', `Room ${condition.roomCode} condition saved: ${condition.scope}`);
+    return { success: true, message: 'Đã lưu hiện trạng bàn giao thành công (UC-BG02)!' };
+  };
+
   const saveHandoverReportBG03 = (report: HandoverReport) => {
     setHandoverReports(prev => {
       const idx = prev.findIndex(r => r.id === report.id);
@@ -2511,12 +2530,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       standardAssets,
       inventoryRecords,
+      handoverConditions,
       handoverReports,
       incidents,
       returnInspections,
       assetComparisonResults,
       handoverReturnReports,
       saveInventoryBG01,
+      saveHandoverConditionBG02,
       saveHandoverReportBG03,
       confirmHandoverSignaturesBG03,
       recordIncidentBG04,

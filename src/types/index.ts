@@ -276,16 +276,25 @@ export interface InventoryRecord {
 export interface HandoverCondition {
   id: string;
   roomCode: string;
+  expectedBatchCode?: string;
+  linkedContractId?: string;
+  linkedLeaseId?: string;
+  status?: 'Nháp' | 'Đã hoàn tất';
   scope: 'Tài sản cụ thể' | 'Hiện trạng chung của phòng';
   assetName?: string;
   description: string;
-  photos: string[]; // Tối đa 10 ảnh JPG/PNG/WEBP <= 5MB
+  photos: string[]; // Tối đa 10 ảnh JPG/PNG/WEBP <= 5MB (dành sẵn 2 cho công tơ)
   videoUrl?: string; // HTTP(S) URL
+  evidenceStatus?: 'Đã đính kèm' | 'Chưa đính kèm' | 'Chưa giải trình' | 'Chưa xác minh';
   initialElectricityKwh: number;
   initialWaterM3: number;
+  meterElectricCode?: string;
+  meterWaterCode?: string;
   meterPhotos: string[];
   tenantChecked: boolean;
   tenantCheckNote?: string;
+  tenantCheckSupplement?: 'Có bổ sung' | 'Không cần bổ sung';
+  supplementNote?: string;
   handoverDoneAt: string;
   loggedBy: string;
   version: number;
