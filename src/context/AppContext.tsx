@@ -182,10 +182,22 @@ interface AppContextType {
   confirmHandoverSignaturesBG03: (reportId: string, tenantSigned: boolean, ownerSigned: boolean, paperLocation?: string) => void;
   recordIncidentBG04: (incident: AssetIncident) => void;
   recordReturnInspectionBG09: (inspection: ReturnInspection) => void;
-  confirmReturnInspectionStep305: (roomCode: string, leaseId: string, evidence: string) => void;
+  confirmReturnInspectionStep305: (roomCode: string, leaseId: string, evidence: string, photos?: string[], videoUrl?: string) => void;
+  correctReturnInspectionStep305: (roomCode: string, leaseId: string, newStatus: 'Đã nhận lại' | 'Chưa nhận lại', reason: string, evidence: string) => void;
   saveAssetComparisonResultBG07: (result: AssetComparisonResult) => void;
+  initHandoverReturnReportDraftBG08: (report: HandoverReturnReport) => { success: boolean; message: string; report: HandoverReturnReport };
+  syncDepositSettlementBG10: (reportId: string, settlementData: {
+    depositSettlementId: string;
+    depositSettlementVersion: number;
+    depositSettlementAmount: number;
+    depositRefundAmount: number;
+    depositDeductionAmount: number;
+    depositAdditionalDue?: number;
+    depositTrackingStatus: '5.8 hợp lệ – Đã thống nhất' | 'Chưa có 5.8/Chờ quyết toán' | 'Chưa thống nhất – Chờ xác nhận của khách' | 'Tranh chấp – Chờ xử lý' | 'Cần rà soát phiên bản';
+    depositTrackingReason?: string;
+  }) => void;
   saveHandoverReturnReportBG11: (report: HandoverReturnReport) => void;
-  confirmFinalReturnReportBG11: (reportId: string, tenantSignedStatus: 'Khách đã ký' | 'Khách không ký', notSignReason?: string) => void;
+  confirmFinalReturnReportBG11: (reportId: string, tenantSignedStatus: 'Khách đã ký' | 'Khách không ký', notSignReason?: string, notSignExchangeInfo?: string, paperLocation?: string, scanUrl?: string) => { success: boolean; message: string };
 
   // Tenants (QT03)
   tenants: Tenant[];
@@ -1563,7 +1575,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const confirmReturnInspectionStep305 = (roomCode: string, leaseId: string, evidence: string) => {
+  const confirmReturnInspectionStep305 = (
+    roomCode: string,
+    leaseId: string,
+    evidence: string,
+    photos?: string[],
+    videoUrl?: string
+  ) => {
     setReturnInspections(prev => prev.map(i => {
       if (i.roomCode === roomCode && i.leaseId === leaseId) {
         return {
@@ -1572,7 +1590,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           step305Confirmed: true,
           step305ConfirmedAt: new Date().toISOString(),
           step305ConfirmedBy: currentUser?.fullName || 'Chủ nhà',
-          step305Evidence: evidence
+          step305Evidence: evidence,
+          step305EvidencePhotos: photos || i.step305EvidencePhotos,
+          step305EvidenceVideoUrl: videoUrl || i.step305EvidenceVideoUrl,
+          isDraft: false,
+          version: i.version || 1
         };
       }
       return i;
@@ -1580,9 +1602,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logSecurity('BG09_STEP305_CONFIRMED', `Handover return confirmed 3.05 for room ${roomCode}`);
   };
 
+  const correctReturnInspectionStep305 = (
+    roomCode: string,
+    leaseId: string,
+    newStatus: 'Đã nhận lại' | 'Chưa nhận lại',
+    reason: string,
+    evidence: string
+  ) => {
+    setReturnInspections(prev => prev.map(i => {
+      if (i.roomCode === roomCode && i.leaseId === leaseId) {
+        const nextVer = (i.version || 1) + 1;
+        return {
+          ...i,
+          step304Status: newStatus,
+          step305Confirmed: newStatus === 'Đã nhận lại',
+          step305ConfirmedAt: newStatus === 'Đã nhận lại' ? new Date().toISOString() : undefined,
+          step305ConfirmedBy: currentUser?.fullName || 'Chủ nhà',
+          step305Evidence: evidence,
+          correctionStatus: 'Sai lệch cần xử lý',
+          correctionNote: reason,
+          version: nextVer
+        };
+      }
+      return i;
+    }));
+    logSecurity('BG09_STEP305_CORRECTED', `3.05 correction recorded for room ${roomCode}`);
+  };
+
   const saveAssetComparisonResultBG07 = (result: AssetComparisonResult) => {
     setAssetComparisonResults(prev => {
-      const idx = prev.findIndex(r => r.id === result.id);
+      const idx = prev.findIndex(r => r.id === result.id || (r.roomCode === result.roomCode && r.leaseId === result.leaseId));
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = result;
@@ -1590,6 +1639,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return [result, ...prev];
     });
+  };
+
+  const initHandoverReturnReportDraftBG08 = (report: HandoverReturnReport) => {
+    const existing = handoverReturnReports.find(r => r.roomCode === report.roomCode && r.leaseId === report.leaseId);
+    if (existing) {
+      return { success: true, message: 'Đã có biên bản trả phòng hiện hành. Hệ thống mở lại biên bản hiện có (AF-01).', report: existing };
+    }
+    const draftReport: HandoverReturnReport = {
+      ...report,
+      status: 'Nháp',
+      version: 1,
+      createdAt: new Date().toISOString()
+    };
+    setHandoverReturnReports(prev => [draftReport, ...prev]);
+    return { success: true, message: 'Đã khởi tạo biên bản trả phòng (Nháp) thành công (UC-BG08)!', report: draftReport };
+  };
+
+  const syncDepositSettlementBG10 = (
+    reportId: string,
+    settlementData: {
+      depositSettlementId: string;
+      depositSettlementVersion: number;
+      depositSettlementAmount: number;
+      depositRefundAmount: number;
+      depositDeductionAmount: number;
+      depositAdditionalDue?: number;
+      depositTrackingStatus: '5.8 hợp lệ – Đã thống nhất' | 'Chưa có 5.8/Chờ quyết toán' | 'Chưa thống nhất – Chờ xác nhận của khách' | 'Tranh chấp – Chờ xử lý' | 'Cần rà soát phiên bản';
+      depositTrackingReason?: string;
+    }
+  ) => {
+    setHandoverReturnReports(prev => prev.map(r => {
+      if (r.id !== reportId) return r;
+      return {
+        ...r,
+        depositSettlementId: settlementData.depositSettlementId,
+        depositSettlementVersion: settlementData.depositSettlementVersion,
+        depositSettlementAmount: settlementData.depositSettlementAmount,
+        depositRefundAmount: settlementData.depositRefundAmount,
+        depositDeductionAmount: settlementData.depositDeductionAmount,
+        depositAdditionalDue: settlementData.depositAdditionalDue,
+        depositTrackingStatus: settlementData.depositTrackingStatus,
+        depositTrackingReason: settlementData.depositTrackingReason,
+        waitingReason: settlementData.depositTrackingStatus === '5.8 hợp lệ – Đã thống nhất' ? undefined : settlementData.depositTrackingReason
+      };
+    }));
   };
 
   const saveHandoverReturnReportBG11 = (report: HandoverReturnReport) => {
@@ -1604,18 +1698,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const confirmFinalReturnReportBG11 = (reportId: string, tenantSignedStatus: 'Khách đã ký' | 'Khách không ký', notSignReason?: string) => {
+  const confirmFinalReturnReportBG11 = (
+    reportId: string,
+    tenantSignedStatus: 'Khách đã ký' | 'Khách không ký',
+    notSignReason?: string,
+    notSignExchangeInfo?: string,
+    paperLocation?: string,
+    scanUrl?: string
+  ) => {
+    const target = handoverReturnReports.find(r => r.id === reportId);
+    if (!target) return { success: false, message: 'Không tìm thấy biên bản trả phòng.' };
+    if (target.status !== 'Đã lập') {
+      return { success: false, message: 'Biên bản phải ở trạng thái ĐÃ LẬP mới được xác nhận 3.24.' };
+    }
     setHandoverReturnReports(prev => prev.map(r => {
       if (r.id !== reportId) return r;
       return {
         ...r,
+        status: 'Đã xác nhận',
         tenantSignedPaper: tenantSignedStatus,
         tenantNotSignReason: notSignReason,
+        tenantNotSignExchangeInfo: notSignExchangeInfo,
         ownerSignedPaper: 'Đã ký',
-        status: 'Đã xác nhận',
-        confirmedAt: new Date().toISOString()
+        paperLocation: paperLocation || r.paperLocation,
+        signedDocumentScanUrl: scanUrl || r.signedDocumentScanUrl,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: currentUser?.fullName || 'Chủ nhà'
       };
     }));
+    return { success: true, message: 'Chủ nhà đã xác nhận hoàn tất biên bản trả phòng (Bước 3.24) thành công!' };
   };
 
   // ==================== TENANTS METHODS (QT03) ====================
@@ -2543,7 +2654,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       recordIncidentBG04,
       recordReturnInspectionBG09,
       confirmReturnInspectionStep305,
+      correctReturnInspectionStep305,
       saveAssetComparisonResultBG07,
+      initHandoverReturnReportDraftBG08,
+      syncDepositSettlementBG10,
       saveHandoverReturnReportBG11,
       confirmFinalReturnReportBG11,
 

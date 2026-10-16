@@ -37,7 +37,13 @@ import {
   Droplet,
   ExternalLink,
   ChevronRight,
-  Info
+  Info,
+  PhoneCall,
+  MessageSquare,
+  Calendar,
+  DollarSign,
+  FileCheck2,
+  FolderOpen
 } from 'lucide-react';
 
 export const HandoverAssetsView: React.FC = () => {
@@ -52,6 +58,7 @@ export const HandoverAssetsView: React.FC = () => {
     returnInspections,
     assetComparisonResults,
     handoverReturnReports,
+    settlementSlips,
     saveInventoryBG01,
     saveHandoverConditionBG02,
     saveHandoverReportBG03,
@@ -59,22 +66,40 @@ export const HandoverAssetsView: React.FC = () => {
     recordIncidentBG04,
     recordReturnInspectionBG09,
     confirmReturnInspectionStep305,
+    correctReturnInspectionStep305,
     saveAssetComparisonResultBG07,
+    initHandoverReturnReportDraftBG08,
+    syncDepositSettlementBG10,
     saveHandoverReturnReportBG11,
     confirmFinalReturnReportBG11,
     initialPaymentRecords,
     currentUser
   } = useApp();
 
-  // Active sub-tab covering all 6 requested Use Cases:
+  // Active sub-tab covering all 11 requested Use Cases:
   // UC-BG01: inventory_bg01 (Kiểm kê tài sản)
   // UC-BG02: condition_bg02 (Hiện trạng bàn giao)
   // UC-BG03: handover_bg03 (Biên bản nhận phòng)
   // UC-BG04: incident_add_bg04 (Ghi nhận sự cố)
   // UC-BG05: incident_search_bg05 (Tra cứu lịch sử sự cố)
   // UC-BG06: compare_bg06 (Đối chiếu tài sản trả phòng)
+  // UC-BG07: result_bg07 (Ghi nhận kết quả đối chiếu tài sản)
+  // UC-BG08: init_report_bg08 (Khởi tạo biên bản trả phòng)
+  // UC-BG09: return_room_bg09 (Ghi nhận kết quả nhận lại phòng 3.04/3.05)
+  // UC-BG10: deposit_check_bg10 (Theo dõi kết quả đối soát cọc QT05)
+  // UC-BG11: final_report_bg11 (Hoàn thiện biên bản trả phòng)
   const [activeTab, setActiveTab] = useState<
-    'inventory_bg01' | 'condition_bg02' | 'handover_bg03' | 'incident_add_bg04' | 'incident_search_bg05' | 'compare_bg06'
+    | 'inventory_bg01'
+    | 'condition_bg02'
+    | 'handover_bg03'
+    | 'incident_add_bg04'
+    | 'incident_search_bg05'
+    | 'compare_bg06'
+    | 'result_bg07'
+    | 'init_report_bg08'
+    | 'return_room_bg09'
+    | 'deposit_check_bg10'
+    | 'final_report_bg11'
   >('inventory_bg01');
 
   // Selected room for active operations
@@ -176,17 +201,115 @@ export const HandoverAssetsView: React.FC = () => {
   const [selectedIncidentDetail, setSelectedIncidentDetail] = useState<AssetIncident | null>(null);
   const [bg05AuditStamp, setBg05AuditStamp] = useState<string | null>(null);
 
-  // ==================== STATE UC-BG06: ĐỐI CHIẾU TÀI SẢN KHI TRẢ PHÒNG ====================
-  const returnInspectionTarget = returnInspections.find(i => i.roomCode === selectedRoomCode);
-  const [comparisonItems, setComparisonItems] = useState<{
-    assetName: string;
-    qtyReceive: number;
-    qtyReturn: number;
-    condReceive: string;
-    condReturn: string;
-    diffResult: 'Đúng như bàn giao' | 'Khác biệt';
-    diffNote: string;
-  }[]>([]);
+  // ==================== STATE UC-BG07: GHI NHẬN KẾT QUẢ ĐỐI CHIẾU TÀI SẢN ====================
+  const existingCompResult = assetComparisonResults.find(r => r.roomCode === selectedRoomCode);
+  const [bg07HasPendingWork, setBg07HasPendingWork] = useState<boolean>(existingCompResult?.hasPendingWork ?? false);
+  const [bg07PendingWorkNote, setBg07PendingWorkNote] = useState<string>(existingCompResult?.pendingWorkNote || '');
+  const [bg07SolutionPlan, setBg07SolutionPlan] = useState<string>(existingCompResult?.solutionPlan || '');
+  const [bg07OwnerOpinion, setBg07OwnerOpinion] = useState<string>(existingCompResult?.ownerOpinion || 'Chủ nhà yêu cầu bảo quản và bàn giao đủ số lượng.');
+  const [bg07TenantOpinion, setBg07TenantOpinion] = useState<string>(existingCompResult?.tenantOpinion || 'Khách thuê đã kiểm tra cùng chủ nhà lúc trả phòng.');
+  const [bg07TenantFeedbackStatus, setBg07TenantFeedbackStatus] = useState<'Đã phản hồi' | 'Chưa phản hồi' | 'Không liên hệ được'>(
+    existingCompResult?.tenantFeedbackStatus || 'Đã phản hồi'
+  );
+  const [bg07UnanimousStatus, setBg07UnanimousStatus] = useState<'Đã thống nhất' | 'Chưa thống nhất' | 'Chưa xác định'>(
+    existingCompResult?.unanimousStatus || 'Đã thống nhất'
+  );
+  const [bg07CompensationAmount, setBg07CompensationAmount] = useState<number>(existingCompResult?.compensationAmount || 0);
+  const [bg07ContactLogs, setBg07ContactLogs] = useState<{
+    id: string;
+    date: string;
+    channel: 'Zalo' | 'Điện thoại' | 'Trực tiếp' | 'Khác';
+    caller: string;
+    result: string;
+    evidence: string;
+  }[]>(existingCompResult?.contactHistory || [
+    {
+      id: 'log_init_1',
+      date: new Date(Date.now() - 52 * 3600 * 1000).toISOString(),
+      channel: 'Điện thoại',
+      caller: currentUser?.fullName || 'Chủ nhà',
+      result: 'Không nhấc máy, gọi 3 cuộc',
+      evidence: 'Ảnh chụp màn hình nhật ký cuộc gọi 3 cuộc nhỡ'
+    },
+    {
+      id: 'log_init_2',
+      date: new Date(Date.now() - 49 * 3600 * 1000).toISOString(),
+      channel: 'Zalo',
+      caller: currentUser?.fullName || 'Chủ nhà',
+      result: 'Tin nhắn gửi thành công nhưng chưa xem/chưa phản hồi',
+      evidence: 'Ảnh chụp màn hình tin nhắn Zalo gửi biên bản đối chiếu'
+    }
+  ]);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [newContactDate, setNewContactDate] = useState(new Date().toISOString().substring(0, 16));
+  const [newContactChannel, setNewContactChannel] = useState<'Zalo' | 'Điện thoại' | 'Trực tiếp' | 'Khác'>('Zalo');
+  const [newContactCaller, setNewContactCaller] = useState(currentUser?.fullName || 'Chủ nhà');
+  const [newContactResult, setNewContactResult] = useState('');
+  const [newContactEvidence, setNewContactEvidence] = useState('');
+
+  // ==================== STATE UC-BG08: KHỞI TẠO BIÊN BẢN TRẢ PHÒNG ====================
+  const existingReturnReport = handoverReturnReports.find(r => r.roomCode === selectedRoomCode);
+  const [bg08Date, setBg08Date] = useState(new Date().toISOString().substring(0, 10));
+  const [bg08Giver, setBg08Giver] = useState(selectedRoom.currentTenantName || 'Trần Văn Bình');
+  const [bg08Receiver, setBg08Receiver] = useState(currentUser?.fullName || 'Nguyễn Văn An');
+  const [bg08Place, setBg08Place] = useState('Tại phòng ' + selectedRoomCode + ', Chung cư BlueHouse');
+  const [bg08Notes, setBg08Notes] = useState('Biên bản lập căn cứ vào kết quả bàn giao nhận phòng và kiểm tra thực tế.');
+
+  // ==================== STATE UC-BG09: GHI NHẬN KẾT QUẢ NHẬN LẠI PHÒNG (3.04 & 3.05) ====================
+  const existingInspection = returnInspections.find(i => i.roomCode === selectedRoomCode);
+  const [bg09InspectionDate, setBg09InspectionDate] = useState(existingInspection?.inspectionDate || new Date().toISOString().substring(0, 10));
+  const [bg09Step304Status, setBg09Step304Status] = useState<'Đã nhận lại' | 'Chưa nhận lại' | 'Chưa có kết quả'>(
+    existingInspection?.step304Status || 'Đã nhận lại'
+  );
+  const [bg09IncompleteReason, setBg09IncompleteReason] = useState(existingInspection?.incompleteReason || '');
+  const [bg09FinalElec, setBg09FinalElec] = useState<number>(existingInspection?.finalElectricityKwh || 1420);
+  const [bg09FinalWater, setBg09FinalWater] = useState<number>(existingInspection?.finalWaterM3 || 58);
+  const [bg09Evidence, setBg09Evidence] = useState(existingInspection?.step305Evidence || 'Khách đã giao đủ 02 chùm chìa khóa và thẻ thang máy tại phòng.');
+  const [bg09EvidencePhotos, setBg09EvidencePhotos] = useState<string[]>(
+    existingInspection?.step305EvidencePhotos || [
+      'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=500&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500&auto=format&fit=crop'
+    ]
+  );
+  const [bg09EvidenceVideoUrl, setBg09EvidenceVideoUrl] = useState(existingInspection?.step305EvidenceVideoUrl || '');
+  const [bg09Items, setBg09Items] = useState(
+    existingInspection?.items && existingInspection.items.length > 0
+      ? existingInspection.items
+      : standardAssets.map(ast => ({
+          name: ast.name,
+          inspected: true,
+          quantity: ast.standardQuantity,
+          condition: 'Bình thường',
+          reasonIfNotInspected: ''
+        }))
+  );
+
+  // Modal đính chính 3.05 (AF-03 / EF-05 / BR-05 & 06)
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionNewStatus, setCorrectionNewStatus] = useState<'Đã nhận lại' | 'Chưa nhận lại'>('Chưa nhận lại');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctionEvidence, setCorrectionEvidence] = useState('');
+
+  // ==================== STATE UC-BG10: THEO DÕI ĐỐI SOÁT CỌC ====================
+  const matchingSettlementSlip = settlementSlips.find(s => s.roomCode === selectedRoomCode);
+  const [bg10WaitingReason, setBg10WaitingReason] = useState('');
+
+  // ==================== STATE UC-BG11: HOÀN THIỆN BIÊN BẢN TRẢ PHÒNG ====================
+  const [bg11TenantSigned, setBg11TenantSigned] = useState<'Khách đã ký' | 'Chưa ký' | 'Khách không ký'>(
+    existingReturnReport?.tenantSignedPaper || 'Khách đã ký'
+  );
+  const [bg11NotSignReason, setBg11NotSignReason] = useState<string>(
+    existingReturnReport?.tenantNotSignReason || 'Không cung cấp lý do'
+  );
+  const [bg11NotSignExchangeInfo, setBg11NotSignExchangeInfo] = useState<string>(
+    existingReturnReport?.tenantNotSignExchangeInfo || 'Đã gọi điện thoại và gửi tin nhắn Zalo thông báo kết quả đối chiếu.'
+  );
+  const [bg11OwnerSigned, setBg11OwnerSigned] = useState<boolean>(existingReturnReport?.ownerSignedPaper === 'Đã ký');
+  const [bg11PaperLocation, setBg11PaperLocation] = useState<string>(
+    existingReturnReport?.paperLocation || 'Tủ hồ sơ tầng 1 - Kẹp trả phòng ' + selectedRoomCode
+  );
+  const [bg11ScanUrl, setBg11ScanUrl] = useState<string>(existingReturnReport?.signedDocumentScanUrl || '');
+  const [showConfirm324Modal, setShowConfirm324Modal] = useState(false);
 
   // Update inventory items when room changes
   const handleRoomChange = (roomCode: string) => {
@@ -252,10 +375,10 @@ export const HandoverAssetsView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <PackageCheck className="w-6 h-6 text-blue-600" />
-            <h1 className="text-lg font-bold text-slate-900">Bàn giao, Kiểm kê &amp; Đối chiếu Tài sản (UC-BG01 → BG06)</h1>
+            <h1 className="text-lg font-bold text-slate-900">Bàn giao, Kiểm kê &amp; Quản lý Biên bản Trả phòng (UC-BG01 &rarr; UC-BG11)</h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Quy trình chuẩn: Kiểm kê tài sản (BG01) &rarr; Ghi nhận hiện trạng (BG02) &rarr; Lập biên bản (BG03) &rarr; Theo dõi sự cố (BG04/05) &rarr; Đối chiếu khi trả phòng (BG06).
+            Quy trình chuẩn 11 Use Case: Nhận phòng (BG01-03) &rarr; Sự cố tài sản (BG04-05) &rarr; Đối chiếu &amp; Xử lý chênh lệch (BG06-07) &rarr; Tạo biên bản &amp; Nhận lại phòng (BG08-09) &rarr; Đối soát cọc (BG10) &rarr; Hoàn thiện biên bản (BG11).
           </p>
         </div>
 
@@ -276,62 +399,120 @@ export const HandoverAssetsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto text-xs shrink-0">
-        <button
-          onClick={() => setActiveTab('inventory_bg01')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'inventory_bg01' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <ClipboardList className="w-3.5 h-3.5" />
-          <span>1. Kiểm kê tài sản (UC-BG01)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('condition_bg02')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'condition_bg02' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Camera className="w-3.5 h-3.5" />
-          <span>2. Hiện trạng bàn giao (UC-BG02)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('handover_bg03')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'handover_bg03' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <FileSignature className="w-3.5 h-3.5" />
-          <span>3. Biên bản nhận phòng (UC-BG03)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('incident_add_bg04')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'incident_add_bg04' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <AlertOctagon className="w-3.5 h-3.5 text-amber-600" />
-          <span>4. Ghi sự cố tài sản (UC-BG04)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('incident_search_bg05')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'incident_search_bg05' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Search className="w-3.5 h-3.5" />
-          <span>5. Tra cứu lịch sử sự cố (UC-BG05)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('compare_bg06')}
-          className={`px-3 py-2 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-            activeTab === 'compare_bg06' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Scale className="w-3.5 h-3.5 text-emerald-600" />
-          <span>6. Đối chiếu trả phòng (UC-BG06)</span>
-        </button>
+      {/* 2-Phase Organized Tab Switcher */}
+      <div className="space-y-1.5">
+        {/* Phase 1: Giai đoạn Nhận phòng & Sự cố (BG01 - BG05) */}
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto text-xs shrink-0">
+          <span className="text-[10px] uppercase font-bold text-slate-500 px-2 py-1 tracking-wider shrink-0 bg-slate-200 rounded">
+            Nhận phòng &amp; Sự cố:
+          </span>
+          <button
+            onClick={() => setActiveTab('inventory_bg01')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'inventory_bg01' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ClipboardList className="w-3.5 h-3.5 text-blue-600" />
+            <span>1. Kiểm kê (BG01)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('condition_bg02')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'condition_bg02' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-blue-600" />
+            <span>2. Hiện trạng (BG02)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('handover_bg03')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'handover_bg03' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileSignature className="w-3.5 h-3.5 text-blue-600" />
+            <span>3. Biên bản nhận (BG03)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('incident_add_bg04')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'incident_add_bg04' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <AlertOctagon className="w-3.5 h-3.5 text-amber-600" />
+            <span>4. Ghi sự cố (BG04)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('incident_search_bg05')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'incident_search_bg05' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5 text-blue-600" />
+            <span>5. Tra cứu sự cố (BG05)</span>
+          </button>
+        </div>
+
+        {/* Phase 2: Giai đoạn Trả phòng & Biên bản (BG06 - BG11) */}
+        <div className="flex items-center gap-1 p-1 bg-emerald-50/70 border border-emerald-200/60 rounded-lg overflow-x-auto text-xs shrink-0">
+          <span className="text-[10px] uppercase font-bold text-emerald-800 px-2 py-1 tracking-wider shrink-0 bg-emerald-100 rounded">
+            Trả phòng &amp; Bàn giao:
+          </span>
+          <button
+            onClick={() => setActiveTab('compare_bg06')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'compare_bg06' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5 text-emerald-600" />
+            <span>6. Đối chiếu trả (BG06)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('result_bg07')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'result_bg07' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+            <span>7. Kết quả đối chiếu (BG07)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('init_report_bg08')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'init_report_bg08' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-blue-600" />
+            <span>8. Tạo biên bản trả (BG08)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('return_room_bg09')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'return_room_bg09' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+            <span>9. Nhận lại 3.04/3.05 (BG09)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('deposit_check_bg10')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'deposit_check_bg10' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+            <span>10. Đối soát cọc (BG10)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('final_report_bg11')}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'final_report_bg11' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-emerald-900 hover:text-slate-900'
+            }`}
+          >
+            <FileCheck2 className="w-3.5 h-3.5 text-blue-700" />
+            <span>11. Hoàn thiện biên bản (BG11)</span>
+          </button>
+        </div>
       </div>
 
       {/* =========================================================================
@@ -1857,7 +2038,8 @@ export const HandoverAssetsView: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    showToast('info', 'Chuyển sang UC-BG07 để ghi nhận kết quả xử lý chênh lệch và thống nhất bồi thường.');
+                    setActiveTab('result_bg07');
+                    showToast('info', 'Chuyển sang UC-BG07: Ghi nhận kết quả đối chiếu tài sản và xử lý chênh lệch.');
                   }}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
@@ -1869,6 +2051,1754 @@ export const HandoverAssetsView: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* =========================================================================
+          TAB 7: GHI NHẬN KẾT QUẢ ĐỐI CHIẾU TÀI SẢN (UC-BG07)
+      ========================================================================= */}
+      {activeTab === 'result_bg07' && (() => {
+        // Evaluate sources from BG06 and BG05
+        const hasDiffFromBG06 = comparisonItems.length > 0
+          ? comparisonItems.some(i => i.diffResult === 'Khác biệt')
+          : (existingCompResult?.hasDifference ?? false);
+
+        // Verification condition for "Không liên hệ được" (BR-UC.BG.07-12)
+        // Must have at least 2 unsuccessful contact attempts and >= 48 hours from 1st attempt
+        const failedLogs = bg07ContactLogs.filter(l => l.result.toLowerCase().includes('không') || l.result.toLowerCase().includes('chưa'));
+        const firstLogTime = bg07ContactLogs.length > 0 ? new Date(bg07ContactLogs[0].date).getTime() : Date.now();
+        const hoursElapsed = (Date.now() - firstLogTime) / (1000 * 3600);
+        const canMarkUnreachable = failedLogs.length >= 2 && hoursElapsed >= 48;
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">UC-BG07</span>
+                  <h2 className="text-sm font-bold text-slate-900">Ghi nhận kết quả đối chiếu tài sản &amp; Xử lý chênh lệch: {selectedRoomCode}</h2>
+                </div>
+                <p className="text-slate-500 mt-0.5">
+                  Ghi nhận trung thực kết quả xử lý chênh lệch và ý kiến của các bên (kể cả chưa thống nhất). Sau đó chuyển thông tin đối chiếu sang QT05 tại bước 3.18 ngoài hệ thống (BR-UC.BG.07-04).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('compare_bg06')}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Scale className="w-3.5 h-3.5" />
+                  <span>&larr; Xem đối chiếu BG06</span>
+                </button>
+                <button
+                  onClick={() => setShowAddContactModal(true)}
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <PhoneCall className="w-3.5 h-3.5" />
+                  <span>+ Ghi nhận liên hệ khách (AF-04)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Read-Only Source Banner (Giao diện mục 2) */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-700">
+              <div>
+                <span className="text-slate-500 block text-[11px]">Chênh lệch thực tế (BG06):</span>
+                <span className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                  hasDiffFromBG06 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {hasDiffFromBG06 ? 'Có chênh lệch thực tế' : 'Không có chênh lệch'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">* Chỉ đọc từ BG06, không được sửa (BR-07-05)</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Dấu tra cứu sự cố BG05:</span>
+                <span className="font-mono text-slate-800 font-semibold">
+                  {bg05AuditStamp || existingCompResult?.bg05AuditStamp || 'Đã đối soát hợp lệ (BG05-OK)'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Biên bản nhận BG03:</span>
+                <span className="font-semibold text-emerald-700">
+                  {existingReport?.reportNumber || 'BB-BG03'} ({existingReport?.status || 'Đã xác nhận'})
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Xác nhận nhận lại 3.05:</span>
+                <span className="font-semibold text-emerald-700">
+                  {returnInspectionTarget?.step305Confirmed ? 'Đã xác nhận nhận lại (BG09)' : 'Chờ xác nhận'}
+                </span>
+              </div>
+            </div>
+
+            {/* Form Inputs (Giao diện mục 3) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Cột trái: Đánh giá nội dung cần xử lý & Trách nhiệm */}
+              <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700">
+                      Còn nội dung cần xử lý? <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">(Trạng thái nghiệp vụ tại BG07)</span>
+                  </div>
+                  <select
+                    value={bg07HasPendingWork ? 'Có' : 'Không'}
+                    onChange={(e) => {
+                      const val = e.target.value === 'Có';
+                      setBg07HasPendingWork(val);
+                      if (!val && hasDiffFromBG06 && !bg07PendingWorkNote.trim()) {
+                        showToast('info', 'Quy tắc BR-07-05: Khi BG06 có chênh lệch nhưng chọn Không còn xử lý, User bắt buộc phải ghi căn cứ đã xử lý.');
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold"
+                  >
+                    <option value="Có">Có - Còn nội dung chênh lệch cần tiếp tục xử lý</option>
+                    <option value="Không">Không - Không còn nội dung cần xử lý (AF-01 / Bước 3.17)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Nội dung phát sinh / Căn cứ đã xử lý {hasDiffFromBG06 && <span className="text-red-500">*</span>}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={bg07PendingWorkNote}
+                    onChange={(e) => setBg07PendingWorkNote(e.target.value)}
+                    placeholder="Mô tả cụ thể hư hỏng, chênh lệch số lượng hoặc căn cứ xác định không cần xử lý thêm..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  />
+                  {hasDiffFromBG06 && !bg07HasPendingWork && (
+                    <span className="text-[10px] text-amber-700 font-semibold block mt-0.5">
+                      * Căn cứ giải trình lý do không cần xử lý khi BG06 ghi nhận có chênh lệch (BR-07-05).
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Phương án xử lý kỹ thuật / thỏa thuận</label>
+                  <textarea
+                    rows={2}
+                    value={bg07SolutionPlan}
+                    onChange={(e) => setBg07SolutionPlan(e.target.value)}
+                    placeholder="Ví dụ: Thay mặt kính bếp từ, kiểm tra vệ sinh điều hòa, hoặc trừ vào tiền cọc..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  />
+                </div>
+
+                {/* Thông tin chi phí tham khảo (BR-UC.BG.07-03 & 10) */}
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-900 text-[11px]">Chi phí bồi thường ước tính trao đổi (đ):</span>
+                    <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold">
+                      Tham khảo – Chưa xác minh
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50000"
+                    value={bg07CompensationAmount}
+                    onChange={(e) => setBg07CompensationAmount(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono font-bold text-blue-700"
+                  />
+                  <span className="text-[10px] text-slate-500 block">
+                    * <strong>BR-UC.BG.07-03:</strong> Chi phí bồi thường này chỉ là thông tin User ghi nhận, <strong>KHÔNG mặc nhiên là khoản phải thu hay khoản khấu trừ cọc</strong>. Việc cấn trừ tiền cọc do Quy trình 5 xử lý độc lập.
+                  </span>
+                </div>
+              </div>
+
+              {/* Cột phải: Ý kiến các bên & Trạng thái phản hồi độc lập */}
+              <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Ý kiến thực tế của Chủ nhà</label>
+                  <textarea
+                    rows={2}
+                    value={bg07OwnerOpinion}
+                    onChange={(e) => setBg07OwnerOpinion(e.target.value)}
+                    placeholder="Ghi nhận quan điểm, yêu cầu của chủ nhà..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Ý kiến khách thuê (User ghi nhận)</label>
+                  <textarea
+                    rows={2}
+                    value={bg07TenantOpinion}
+                    onChange={(e) => setBg07TenantOpinion(e.target.value)}
+                    placeholder="Ghi lại nguyên văn ý kiến của khách thuê khi trao đổi..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  />
+                </div>
+
+                {/* Hai trường độc lập: Phản hồi khách & Mức độ thống nhất (BR-UC.BG.07-08) */}
+                <div className="grid grid-cols-2 gap-3 p-3 bg-white border border-slate-200 rounded-lg">
+                  <div>
+                    <label className="block font-bold text-slate-800 text-[11px] mb-1">
+                      1. Phản hồi của khách (BR-08)
+                    </label>
+                    <select
+                      value={bg07TenantFeedbackStatus}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        if (val === 'Không liên hệ được' && !canMarkUnreachable) {
+                          showToast('error', 'EF-05 / BR-07-12: Để chọn "Không liên hệ được", phải có ít nhất 2 lượt liên hệ không thành công và đã qua tối thiểu 48 giờ từ lượt đầu.');
+                          return;
+                        }
+                        setBg07TenantFeedbackStatus(val);
+                        if (val !== 'Đã phản hồi' && bg07UnanimousStatus === 'Đã thống nhất') {
+                          setBg07UnanimousStatus('Chưa thống nhất');
+                        }
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs font-semibold bg-white"
+                    >
+                      <option value="Đã phản hồi">Đã phản hồi</option>
+                      <option value="Chưa phản hồi">Chưa phản hồi</option>
+                      <option value="Không liên hệ được">Không liên hệ được</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-800 text-[11px] mb-1">
+                      2. Mức độ thống nhất (BR-08)
+                    </label>
+                    <select
+                      value={bg07UnanimousStatus}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        if (val === 'Đã thống nhất' && bg07TenantFeedbackStatus !== 'Đã phản hồi') {
+                          showToast('error', 'EF-05: Khách chưa phản hồi hoặc không liên hệ được thì KHÔNG được chọn "Đã thống nhất" (không suy im lặng là đồng ý).');
+                          return;
+                        }
+                        setBg07UnanimousStatus(val);
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs font-semibold bg-white"
+                    >
+                      <option value="Đã thống nhất">Đã thống nhất</option>
+                      <option value="Chưa thống nhất">Chưa thống nhất</option>
+                      <option value="Chưa xác định">Chưa xác định</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Contact Attempts summary */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 text-[11px]">
+                      Lịch sử liên hệ thực tế ({bg07ContactLogs.length} lượt):
+                    </span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      canMarkUnreachable ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      Điều kiện 48h &amp; &ge;2 lượt: {canMarkUnreachable ? 'Đạt' : 'Chưa đủ'}
+                    </span>
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                    {bg07ContactLogs.map(log => (
+                      <div key={log.id} className="p-1.5 bg-white border border-slate-200 rounded text-[10px] flex justify-between items-center">
+                        <div>
+                          <strong className="text-slate-800">{log.channel}</strong> · {log.date.substring(0, 16).replace('T', ' ')}
+                          <p className="text-slate-500 truncate max-w-[220px]">{log.result}</p>
+                        </div>
+                        <span className="text-[9px] text-blue-600 font-medium">Bằng chứng: {log.evidence.substring(0, 20)}...</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bước 3.18 Reminder Notice (BR-UC.BG.07-04 & 11, EF-06) */}
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-900 text-[11px] space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Nhắc nhở bàn giao thông tin sang Bước 3.18 ngoài hệ thống:</span>
+              </div>
+              <p>
+                Sau khi lưu kết quả đối chiếu, <strong>Chủ nhà thực hiện chuyển thông tin đối chiếu và tiền cọc sang Quy trình 5 – Quyết toán cọc tại bước 3.18 ngoài hệ thống</strong> (gồm mã phòng, hợp đồng, lần thuê, kết quả đối chiếu, phiên bản hồ sơ).
+                Hệ thống <strong>không tự động mở hay tự tạo hồ sơ quyết toán cọc</strong> (BR-UC.BG.07-04).
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setActiveTab('compare_bg06')}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                &larr; Quay lại đối chiếu BG06
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    // Validations EF-02 & EF-05
+                    if (hasDiffFromBG06 && bg07HasPendingWork && !bg07PendingWorkNote.trim()) {
+                      showToast('error', 'EF-02: BG06 xác định có chênh lệch thực tế, vui lòng nhập nội dung phát sinh cần xử lý.');
+                      return;
+                    }
+                    if (hasDiffFromBG06 && !bg07HasPendingWork && !bg07PendingWorkNote.trim()) {
+                      showToast('error', 'BR-07-05: Khi có chênh lệch mà chọn không còn xử lý, bắt buộc phải ghi căn cứ đã xử lý.');
+                      return;
+                    }
+                    if (bg07TenantFeedbackStatus !== 'Đã phản hồi' && bg07UnanimousStatus === 'Đã thống nhất') {
+                      showToast('error', 'EF-05: Khách chưa phản hồi hoặc không liên hệ được, không thể lưu trạng thái "Đã thống nhất".');
+                      return;
+                    }
+
+                    const result: AssetComparisonResult = {
+                      id: existingCompResult?.id || 'comp_' + selectedRoomCode.replace(/\D/g, '') + '_' + Date.now().toString().slice(-4),
+                      roomCode: selectedRoomCode,
+                      leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      contractId: targetContract?.id,
+                      hasDifference: hasDiffFromBG06,
+                      hasPendingWork: bg07HasPendingWork,
+                      pendingWorkNote: bg07PendingWorkNote,
+                      solutionPlan: bg07SolutionPlan,
+                      ownerOpinion: bg07OwnerOpinion,
+                      tenantOpinion: bg07TenantOpinion,
+                      tenantFeedbackStatus: bg07TenantFeedbackStatus,
+                      unanimousStatus: bg07UnanimousStatus,
+                      compensationAmount: bg07CompensationAmount,
+                      contactHistory: bg07ContactLogs,
+                      contactAttemptsCount: bg07ContactLogs.length,
+                      firstContactAt: bg07ContactLogs[0]?.date,
+                      unreachableConfirmedAt: bg07TenantFeedbackStatus === 'Không liên hệ được' ? new Date().toISOString() : undefined,
+                      unreachableConfirmedBy: bg07TenantFeedbackStatus === 'Không liên hệ được' ? (currentUser?.fullName || 'Chủ nhà') : undefined,
+                      transferredToSettlement318: true,
+                      transferredAt: new Date().toISOString(),
+                      bg05AuditStamp: bg05AuditStamp || 'AUDIT-BG05-VALID',
+                      version: (existingCompResult?.version || 1),
+                      loggedAt: new Date().toISOString()
+                    };
+
+                    saveAssetComparisonResultBG07(result);
+                    showToast('success', 'Đã lưu kết quả đối chiếu tài sản thành công (UC-BG07)! Hãy chuyển giao thông tin sang bước 3.18 ngoài hệ thống.');
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold cursor-pointer shadow-xs"
+                >
+                  Lưu kết quả đối chiếu (Bước 4)
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('init_report_bg08');
+                    showToast('info', 'Mở UC-BG08: Khởi tạo biên bản trả phòng.');
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>Tạo biên bản trả phòng (BG08)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================================
+          TAB 8: KHỞI TẠO BIÊN BẢN TRẢ PHÒNG (UC-BG08)
+      ========================================================================= */}
+      {activeTab === 'init_report_bg08' && (() => {
+        const hasReceiveReport = Boolean(existingReport);
+        const isReceiveReportConfirmed = Boolean(existingReport && existingReport.status === 'Đã xác nhận');
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">UC-BG08</span>
+                  <h2 className="text-sm font-bold text-slate-900">Khởi tạo biên bản trả phòng (Bước 3.02): {selectedRoomCode}</h2>
+                </div>
+                <p className="text-slate-500 mt-0.5">
+                  Khởi tạo biên bản trả phòng sau sự kiện khách tiến hành bàn giao (3.01). Hồ sơ ban đầu lưu ở trạng thái NHÁP, chưa phải bản ký chính thức (BR-UC.BG.08-02).
+                </p>
+              </div>
+
+              {existingReturnReport && (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono bg-blue-50 text-blue-800 font-bold px-2.5 py-1 rounded border border-blue-200">
+                    Mã hiện hành: {existingReturnReport.reportNumber} ({existingReturnReport.status})
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Check Source BG03 */}
+            {!isReceiveReportConfirmed && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cảnh báo thiếu hồ sơ biên bản nhận phòng BG03 (AF-02 &amp; BR-UC.BG.08-01 &amp; 05):</span>
+                </div>
+                <p>
+                  Chưa tìm thấy hoặc biên bản nhận phòng BG03 chưa có đủ 2 chữ ký tay xác nhận. Hệ thống vẫn cho phép khởi tạo biên bản trả phòng ở trạng thái <strong>Nháp</strong> để ghi nhận thực tế, nhưng sẽ <strong>gắn cờ Thiếu biên bản nhận</strong> và khóa đối chiếu hoàn tất/xác nhận biên bản cuối cùng (BG06/BG11) cho đến khi hồ sơ gốc hợp lệ.
+                </p>
+              </div>
+            )}
+
+            {/* Form Fields (Giao diện mục 2 & 3) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Mã phòng &amp; Lần thuê hiện hành (Chỉ xem)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={`${selectedRoom.roomCode} - Hợp đồng: ${targetContract?.id || 'HD-' + selectedRoom.roomCode} (${selectedRoom.currentLeaseId || 'THUE-' + selectedRoom.roomCode})`}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-slate-100 font-mono text-slate-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Ngày lập biên bản trả phòng <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={bg08Date}
+                    onChange={(e) => setBg08Date(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Địa điểm bàn giao trả phòng</label>
+                  <input
+                    type="text"
+                    value={bg08Place}
+                    onChange={(e) => setBg08Place(e.target.value)}
+                    placeholder="Tại phòng..."
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Bên bàn giao (Khách) <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={bg08Giver}
+                      onChange={(e) => setBg08Giver(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Bên nhận (Chủ nhà) <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={bg08Receiver}
+                      onChange={(e) => setBg08Receiver(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Ghi chú ban đầu khi lập biên bản</label>
+                  <textarea
+                    rows={3}
+                    value={bg08Notes}
+                    onChange={(e) => setBg08Notes(e.target.value)}
+                    placeholder="Ghi nhận bối cảnh tiếp nhận trả phòng..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded bg-white text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Reference Asset Table */}
+            <div className="space-y-1.5">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
+                Danh sách tài sản tham chiếu từ đầu kỳ (Chỉ xem, nguồn đối chứng):
+              </span>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-48">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px]">
+                      <th className="py-2 px-3">Tài sản</th>
+                      <th className="py-2 px-3 text-center">SL Danh mục</th>
+                      <th className="py-2 px-3 text-center">SL Lúc nhận (BG03)</th>
+                      <th className="py-2 px-3">Tình trạng lúc nhận</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {inventoryItems.map(ast => (
+                      <tr key={ast.id} className="hover:bg-slate-50">
+                        <td className="py-1.5 px-3 font-semibold text-slate-800">{ast.name}</td>
+                        <td className="py-1.5 px-3 font-mono text-center">{ast.standardQuantity}</td>
+                        <td className="py-1.5 px-3 font-mono text-center text-blue-700 font-bold">{ast.actualQuantity}</td>
+                        <td className="py-1.5 px-3 text-slate-600">{ast.physicalCondition}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Buttons (Giao diện mục 4) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  showToast('info', 'Đã hủy khởi tạo biên bản trả phòng (AF-03).');
+                  setActiveTab('compare_bg06');
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                Hủy (AF-03)
+              </button>
+
+              <div className="flex items-center gap-2">
+                {/* AF-01: Mở biên bản Nháp hiện có nếu đã tồn tại */}
+                {existingReturnReport ? (
+                  <button
+                    onClick={() => {
+                      showToast('info', `Mở biên bản trả phòng hiện hành ${existingReturnReport.reportNumber} (AF-01).`);
+                      setActiveTab('final_report_bg11');
+                    }}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold cursor-pointer"
+                  >
+                    Mở biên bản Nháp hiện có (AF-01)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (!bg08Giver.trim() || !bg08Receiver.trim() || !bg08Date) {
+                        showToast('error', 'EF-02: Vui lòng nhập đầy đủ thông tin bên giao, bên nhận và ngày lập.');
+                        return;
+                      }
+
+                      const newRep: HandoverReturnReport = {
+                        id: 'ret_rep_' + selectedRoomCode.replace(/\D/g, '') + '_' + Date.now().toString().slice(-4),
+                        reportNumber: 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026',
+                        roomCode: selectedRoomCode,
+                        leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                        contractId: targetContract?.id || 'HD-' + selectedRoomCode + '-2026',
+                        status: 'Nháp',
+                        missingReceiveReport: !isReceiveReportConfirmed,
+                        initialConditionNotes: bg08Notes,
+                        handoverPlace: bg08Place,
+                        date: bg08Date,
+                        giverName: bg08Giver,
+                        receiverName: bg08Receiver,
+                        tenantSignedPaper: 'Chưa ký',
+                        ownerSignedPaper: 'Chưa ký',
+                        reviewRequired: false,
+                        version: 1,
+                        createdAt: new Date().toISOString()
+                      };
+
+                      const res = initHandoverReturnReportDraftBG08(newRep);
+                      if (res.success) {
+                        showToast('success', res.message);
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold cursor-pointer shadow-xs"
+                  >
+                    Khởi tạo biên bản Nháp (Bước 3)
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setActiveTab('return_room_bg09');
+                    showToast('info', 'Mở UC-BG09: Ghi nhận kết quả nhận lại phòng thực tế (3.04 & 3.05).');
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>Kiểm tra tài sản khi trả (BG09)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================================
+          TAB 9: GHI NHẬN KẾT QUẢ NHẬN LẠI PHÒNG (UC-BG09)
+      ========================================================================= */}
+      {activeTab === 'return_room_bg09' && (() => {
+        // Evaluate completeness of 3.03
+        const allItemsChecked = bg09Items.every(i => i.inspected);
+        const hasMissingReason = bg09Items.filter(i => !i.inspected).every(i => Boolean(i.reasonIfNotInspected && i.reasonIfNotInspected.trim()));
+        const is303Complete = allItemsChecked;
+
+        // Condition for 3.04 = "Đã nhận lại"
+        const canSaveOfficially304 = is303Complete && Boolean(bg09Evidence && bg09Evidence.trim());
+        const is305Confirmed = Boolean(returnInspectionTarget?.step305Confirmed);
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">UC-BG09</span>
+                  <h2 className="text-sm font-bold text-slate-900">Ghi nhận kết quả nhận lại phòng (Bước 3.04 &amp; 3.05): {selectedRoomCode}</h2>
+                </div>
+                <p className="text-slate-500 mt-0.5">
+                  Bước 3.03 kiểm tra thực tế ngoài hệ thống. Bước 3.04 ghi nhận kết quả. Khi Đã nhận lại và đủ chứng cứ, Chủ nhà xác nhận độc lập tại 3.05 &rarr; căn cứ để UC-PH-08 chuyển phòng Trống (BR-UC.BG.09-03).
+                </p>
+              </div>
+
+              {is305Confirmed && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCorrectionModal(true)}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Đính chính 3.05 (BR-05/06)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Status overview */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-700">
+              <div>
+                <span className="text-slate-500 block text-[11px]">Trạng thái kiểm tra 3.03:</span>
+                <span className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                  is303Complete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {is303Complete ? 'Đã kiểm tra đầy đủ (3.03)' : 'Kiểm tra chưa đầy đủ'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Kết quả nhận lại (3.04):</span>
+                <span className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                  bg09Step304Status === 'Đã nhận lại' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {bg09Step304Status}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Xác nhận độc lập 3.05:</span>
+                <span className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                  is305Confirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {is305Confirmed ? 'Đã xác nhận (Chủ nhà)' : 'Chờ Chủ nhà xác nhận'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Căn cứ cập nhật phòng Trống:</span>
+                <span className={`font-semibold ${is305Confirmed ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+                  {is305Confirmed ? 'Đủ điều kiện ghi Trống (PH-08)' : 'Chưa đủ điều kiện'}
+                </span>
+              </div>
+            </div>
+
+            {/* Bảng kiểm tra tài sản thực tế (Bước 3.03) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                  Bảng kiểm tra tài sản thực tế tại phòng (Bước 3.03):
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  Dòng chưa kiểm tra phải ghi rõ lý do (EF-06 / BR-UC.BG.09-11)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px]">
+                      <th className="py-2.5 px-3">Tài sản / Thiết bị</th>
+                      <th className="py-2.5 px-3">Trạng thái kiểm tra</th>
+                      <th className="py-2.5 px-3 text-center">SL Thực tế</th>
+                      <th className="py-2.5 px-3">Tình trạng vật lý</th>
+                      <th className="py-2.5 px-3">Lý do nếu chưa/không thể kiểm tra</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {bg09Items.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-3 font-semibold text-slate-800">{item.name}</td>
+                        <td className="py-2 px-3">
+                          <select
+                            value={item.inspected ? 'Đã kiểm tra' : 'Chưa kiểm tra'}
+                            onChange={(e) => {
+                              const val = e.target.value === 'Đã kiểm tra';
+                              setBg09Items(prev => prev.map((it, i) => i === idx ? { ...it, inspected: val } : it));
+                            }}
+                            className="px-2 py-1 border border-slate-300 rounded text-xs bg-white"
+                          >
+                            <option value="Đã kiểm tra">Đã kiểm tra</option>
+                            <option value="Chưa kiểm tra">Chưa kiểm tra / Không thể kiểm tra</option>
+                          </select>
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={!item.inspected}
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const qty = Number(e.target.value);
+                              setBg09Items(prev => prev.map((it, i) => i === idx ? { ...it, quantity: qty } : it));
+                            }}
+                            className={`w-14 px-2 py-1 border border-slate-300 rounded font-mono text-center ${
+                              item.inspected ? 'bg-white font-bold' : 'bg-slate-100 text-slate-400'
+                            }`}
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <select
+                            disabled={!item.inspected}
+                            value={item.condition}
+                            onChange={(e) => {
+                              const cond = e.target.value;
+                              setBg09Items(prev => prev.map((it, i) => i === idx ? { ...it, condition: cond } : it));
+                            }}
+                            className={`px-2 py-1 border border-slate-300 rounded text-xs ${
+                              item.inspected ? 'bg-white' : 'bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            <option value="Bình thường">Bình thường</option>
+                            <option value="Hư hỏng">Hư hỏng</option>
+                            <option value="Khác">Khác</option>
+                          </select>
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            placeholder="Ghi rõ lý do nếu chưa kiểm tra được..."
+                            value={item.reasonIfNotInspected || ''}
+                            onChange={(e) => {
+                              const r = e.target.value;
+                              setBg09Items(prev => prev.map((it, i) => i === idx ? { ...it, reasonIfNotInspected: r } : it));
+                            }}
+                            className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Chỉ số điện nước cuối kỳ (BR-UC.BG09-THU: mốc dừng tính dịch vụ) */}
+            <div className="p-3.5 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between border-b border-blue-200 pb-1.5">
+                <span className="font-bold text-blue-900">Chốt chỉ số điện nước cuối kỳ (Mốc dừng tính tiền dịch vụ - BR09-THU):</span>
+                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">
+                  Không sinh tiền thuê kỳ sau ngày nhận lại
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Số điện cuối kỳ (kWh):</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bg09FinalElec}
+                    onChange={(e) => setBg09FinalElec(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono font-bold text-amber-800"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Số nước cuối kỳ (m³):</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bg09FinalWater}
+                    onChange={(e) => setBg09FinalWater(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono font-bold text-blue-800"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bước 3.04: Kết quả nhận lại & Bằng chứng */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 text-xs">
+                  Kết quả nhận lại phòng tại Bước 3.04 <span className="text-red-500">*</span>:
+                </label>
+                <select
+                  value={bg09Step304Status}
+                  onChange={(e) => setBg09Step304Status(e.target.value as any)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-900"
+                >
+                  <option value="Đã nhận lại">Đã nhận lại</option>
+                  <option value="Chưa nhận lại">Chưa nhận lại (AF-01 &rarr; chuyển 3.06)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Mô tả bằng chứng nhận lại phòng thực tế (Chìa khóa, thẻ xe, hiện trạng) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={bg09Evidence}
+                  onChange={(e) => setBg09Evidence(e.target.value)}
+                  placeholder="Ví dụ: Đã nhận đủ 2 chìa khóa, 1 thẻ từ, phòng dọn sạch sẽ..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+
+              {/* Photos & Video URL */}
+              <div>
+                <span className="block font-semibold text-slate-700 mb-1">Ảnh bằng chứng nhận lại (&le; 10 ảnh, &le; 5MB/ảnh):</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {bg09EvidencePhotos.map((p, i) => (
+                    <div key={i} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-300">
+                      <img src={p} alt="Ảnh nhận lại" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setBg09EvidencePhotos(prev => prev.filter((_, idx) => idx !== i))}
+                        className="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {bg09EvidencePhotos.length < 10 && (
+                    <button
+                      onClick={() => setBg09EvidencePhotos(prev => [...prev, 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500&auto=format&fit=crop'])}
+                      className="w-14 h-14 rounded-lg border-2 border-dashed border-slate-300 hover:border-blue-500 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="text-[9px]">Thêm ảnh</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Notice EF-02 validation */}
+              {bg09Step304Status === 'Đã nhận lại' && !canSaveOfficially304 && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px]">
+                  <strong>EF-02:</strong> Để lưu chính thức kết quả <strong>Đã nhận lại</strong> tại 3.04, bảng kiểm tra 3.03 phải <strong>Đã kiểm tra đầy đủ 100%</strong> và có mô tả bằng chứng. Nếu chưa đủ, chỉ cho phép <em>Lưu nháp - chờ bổ sung</em> và chưa kích hoạt xác nhận 3.05.
+                </div>
+              )}
+            </div>
+
+            {/* Actions for 3.04 & 3.05 */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                {/* Lưu nháp (khi chưa đủ 3.03 hoặc cần bổ sung) */}
+                <button
+                  onClick={() => {
+                    const draftInsp: ReturnInspection = {
+                      id: existingInspection?.id || 'ret_' + selectedRoomCode.replace(/\D/g, ''),
+                      roomCode: selectedRoomCode,
+                      leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      contractId: targetContract?.id,
+                      inspectionDate: bg09InspectionDate,
+                      step304Status: bg09Step304Status,
+                      step305Confirmed: false,
+                      step305Evidence: bg09Evidence,
+                      step305EvidencePhotos: bg09EvidencePhotos,
+                      step305EvidenceVideoUrl: bg09EvidenceVideoUrl,
+                      finalElectricityKwh: bg09FinalElec,
+                      finalWaterM3: bg09FinalWater,
+                      assetsCheckedFully: is303Complete,
+                      incompleteReason: bg09IncompleteReason,
+                      isDraft: true,
+                      version: (existingInspection?.version || 1),
+                      items: bg09Items
+                    };
+                    recordReturnInspectionBG09(draftInsp);
+                    showToast('info', 'Đã lưu nháp hồ sơ kiểm tra nhận lại (chờ bổ sung kiểm tra 3.03).');
+                  }}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold cursor-pointer"
+                >
+                  Lưu nháp kiểm tra
+                </button>
+
+                {/* Lưu kết quả 3.04 */}
+                <button
+                  onClick={() => {
+                    if (bg09Step304Status === 'Đã nhận lại' && !canSaveOfficially304) {
+                      showToast('error', 'EF-02: Bảng 3.03 chưa kiểm tra đầy đủ hoặc thiếu mô tả chứng cứ nhận lại. Vui lòng kiểm tra lại hoặc chọn Lưu nháp.');
+                      return;
+                    }
+
+                    const inspRecord: ReturnInspection = {
+                      id: existingInspection?.id || 'ret_' + selectedRoomCode.replace(/\D/g, ''),
+                      roomCode: selectedRoomCode,
+                      leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      contractId: targetContract?.id,
+                      inspectionDate: bg09InspectionDate,
+                      step304Status: bg09Step304Status,
+                      step305Confirmed: existingInspection?.step305Confirmed || false,
+                      step305ConfirmedAt: existingInspection?.step305ConfirmedAt,
+                      step305ConfirmedBy: existingInspection?.step305ConfirmedBy,
+                      step305Evidence: bg09Evidence,
+                      step305EvidencePhotos: bg09EvidencePhotos,
+                      step305EvidenceVideoUrl: bg09EvidenceVideoUrl,
+                      finalElectricityKwh: bg09FinalElec,
+                      finalWaterM3: bg09FinalWater,
+                      assetsCheckedFully: is303Complete,
+                      incompleteReason: bg09IncompleteReason,
+                      isDraft: false,
+                      version: (existingInspection?.version || 1),
+                      items: bg09Items
+                    };
+
+                    recordReturnInspectionBG09(inspRecord);
+
+                    if (bg09Step304Status === 'Chưa nhận lại') {
+                      showToast('info', 'Đã lưu kết quả 3.04 = CHƯA NHẬN LẠI &rarr; Chuyển 3.06 chờ khách bàn giao lại (AF-01).');
+                    } else {
+                      showToast('success', 'Đã lưu kết quả 3.04 = ĐÃ NHẬN LẠI thành công! Sẵn sàng để Chủ nhà xác nhận độc lập ở Bước 3.05.');
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold cursor-pointer shadow-xs"
+                >
+                  Lưu kết quả nhận lại (Bước 3.04)
+                </button>
+              </div>
+
+              {/* Bước 3.05: Chủ nhà xác nhận độc lập */}
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={is305Confirmed || bg09Step304Status !== 'Đã nhận lại' || !canSaveOfficially304}
+                  onClick={() => {
+                    if (is305Confirmed) {
+                      showToast('info', 'Chủ nhà đã xác nhận độc lập tại 3.05 trước đó.');
+                      return;
+                    }
+                    if (bg09Step304Status !== 'Đã nhận lại' || !canSaveOfficially304) {
+                      showToast('error', 'EF-03: Chưa có kết quả 3.04 = Đã nhận lại hợp lệ để thực hiện xác nhận 3.05.');
+                      return;
+                    }
+                    confirmReturnInspectionStep305(
+                      selectedRoomCode,
+                      targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      bg09Evidence,
+                      bg09EvidencePhotos,
+                      bg09EvidenceVideoUrl
+                    );
+                    showToast('success', 'Chủ nhà đã XÁC NHẬN ĐỘC LẬP nhận lại phòng tại Bước 3.05 thành công! Phòng đã đủ căn cứ để chuyển sang trạng thái TRỐNG.');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold cursor-pointer shadow-xs flex items-center gap-1.5 ${
+                    is305Confirmed
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : bg09Step304Status === 'Đã nhận lại' && canSaveOfficially304
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{is305Confirmed ? 'Đã xác nhận 3.05 (Chủ nhà)' : 'Xác nhận độc lập Đã nhận lại (Bước 3.05)'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('deposit_check_bg10');
+                    showToast('info', 'Mở UC-BG10: Theo dõi đối soát cọc từ Quy trình 5.');
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>Đối soát cọc (BG10)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================================
+          TAB 10: THEO DÕI ĐỐI SOÁT CỌC (UC-BG10)
+      ========================================================================= */}
+      {activeTab === 'deposit_check_bg10' && (() => {
+        // Evaluate QT05 settlement slip status
+        const slip = matchingSettlementSlip;
+        const initialDeposit = slip?.initialDepositAmount || currentInitialPayment?.depositAmount || 3800000;
+        const deductionTotal = slip?.deductions.reduce((s, d) => s + d.amount, 0) || 0;
+        const calculatedResult = slip?.calculatedResult ?? (initialDeposit - deductionTotal);
+
+        // Tracking label (Giao diện mục 3 & 7)
+        let trackingStatus:
+          | 'Chưa có 5.8/Chờ quyết toán'
+          | '5.8 hợp lệ – Đã thống nhất'
+          | 'Chưa thống nhất – Chờ xác nhận của khách'
+          | 'Tranh chấp – Chờ xử lý'
+          | 'Đã ghi kết quả vào biên bản'
+          | 'Cần rà soát phiên bản' = 'Chưa có 5.8/Chờ quyết toán';
+
+        if (existingReturnReport?.depositSettlementId) {
+          trackingStatus = 'Đã ghi kết quả vào biên bản';
+        } else if (slip?.status === 'Khách đồng ý' || slip?.status === 'Đã hoàn tất') {
+          trackingStatus = '5.8 hợp lệ – Đã thống nhất';
+        } else if (slip?.status === 'Chờ khách phản hồi') {
+          trackingStatus = 'Chưa thống nhất – Chờ xác nhận của khách';
+        } else if (slip?.status === 'Khách phản đối' || slip?.status === 'Khiếu nại') {
+          trackingStatus = 'Tranh chấp – Chờ xử lý';
+        }
+
+        const is58Valid = trackingStatus === '5.8 hợp lệ – Đã thống nhất';
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">UC-BG10</span>
+                  <h2 className="text-sm font-bold text-slate-900">Theo dõi kết quả đối soát cọc từ Quy trình 5 (QT05): {selectedRoomCode}</h2>
+                </div>
+                <p className="text-slate-500 mt-0.5">
+                  BG10 chỉ theo dõi trạng thái kết quả của QT05; không tự tính hoặc ghi giao dịch cọc mới (BR-BG10-01). Chỉ ghi vào biên bản khi có kết quả bước 5.8 hợp lệ (BR-BG10-05).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded text-xs font-bold border ${
+                  trackingStatus === '5.8 hợp lệ – Đã thống nhất' || trackingStatus === 'Đã ghi kết quả vào biên bản'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : trackingStatus === 'Tranh chấp – Chờ xử lý'
+                    ? 'bg-rose-50 text-rose-800 border-rose-300'
+                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                }`}>
+                  Nhãn theo dõi nguồn: {trackingStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Read-Only Financial Overview (Giao diện mục 2) */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-700">
+              <div>
+                <span className="text-slate-500 block text-[11px]">Cọc gốc ban đầu (Hợp đồng chuỗi thuê):</span>
+                <strong className="font-mono text-blue-700 text-sm">{initialDeposit.toLocaleString('vi-VN')} đ</strong>
+                <span className="text-[10px] text-slate-400 block mt-0.5">* BR-BG10-02: lấy từ hợp đồng đầu tiên</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Tổng khấu trừ từ QT05:</span>
+                <strong className="font-mono text-rose-700 text-sm">{deductionTotal.toLocaleString('vi-VN')} đ</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Số tiền hoàn lại / thu thêm:</span>
+                <strong className="font-mono text-emerald-700 text-sm">{calculatedResult.toLocaleString('vi-VN')} đ</strong>
+                <span className="text-[10px] text-slate-500 block">{calculatedResult >= 0 ? '(Hoàn trả khách)' : '(Thu thêm từ khách)'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">Mã hồ sơ QT05 / Phiên bản:</span>
+                <strong className="font-mono text-slate-900">{slip?.id || 'QTC-2026-CHỜ'} (v1)</strong>
+              </div>
+            </div>
+
+            {/* Slip Details & Deductions Table */}
+            {slip && (
+              <div className="space-y-2">
+                <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
+                  Chi tiết các khoản đối trừ từ hồ sơ quyết toán cọc {slip.id}:
+                </span>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px]">
+                        <th className="py-2 px-3">Khoản mục</th>
+                        <th className="py-2 px-3">Mô tả chi tiết</th>
+                        <th className="py-2 px-3 text-right">Số tiền khấu trừ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {slip.deductions.map(d => (
+                        <tr key={d.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-semibold text-slate-800">{d.category}</td>
+                          <td className="py-2 px-3 text-slate-600">{d.description}</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-rose-700">
+                            {d.amount.toLocaleString('vi-VN')} đ
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Evidence & feedback */}
+                <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1 text-slate-700">
+                  <div>Phản hồi khách thuê: <strong className="text-emerald-700">{slip.tenantFeedback || 'Đồng ý phương án'}</strong></div>
+                  <div>Chứng cứ thanh toán/xác nhận: <em>{slip.contactLogs[0]?.evidence || 'Tin nhắn Zalo xác nhận tài khoản nhận hoàn cọc'}</em></div>
+                </div>
+              </div>
+            )}
+
+            {/* If 5.8 not ready or disputed */}
+            {!is58Valid && trackingStatus !== 'Đã ghi kết quả vào biên bản' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] space-y-2">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Quy trình 5 chưa có kết quả 5.8 hợp lệ được hai bên thống nhất (AF-01 &amp; AF-03 &amp; AF-04):</span>
+                </div>
+                <p>
+                  Theo BR-BG10-05, hệ thống chỉ cho phép ghi kết quả vào biên bản khi QT05 có kết quả bước 5.8 hợp lệ và hai bên đã thống nhất. Hiện tại hồ sơ đang ở trạng thái theo dõi <em>Chờ kết quả</em>. Biên bản trả phòng giữ trạng thái <strong>Nháp</strong> (không tạo trạng thái biên bản thứ tư).
+                </p>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Ghi lý do chờ quyết toán (Bước 3.20):</label>
+                  <input
+                    type="text"
+                    value={bg10WaitingReason}
+                    onChange={(e) => setBg10WaitingReason(e.target.value)}
+                    placeholder="Ví dụ: Chờ chốt tiền điện nước kỳ cuối hoặc chờ khách phản hồi phương án..."
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setActiveTab('return_room_bg09')}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                &larr; Xem kết quả nhận lại (BG09)
+              </button>
+
+              <div className="flex items-center gap-2">
+                {/* AF-01: Lưu biên bản để chờ */}
+                {!is58Valid && (
+                  <button
+                    onClick={() => {
+                      if (existingReturnReport) {
+                        saveHandoverReturnReportBG11({
+                          ...existingReturnReport,
+                          waitingReason: bg10WaitingReason || 'Chờ kết quả đối soát cọc từ QT05 bước 5.8'
+                        });
+                      }
+                      showToast('info', 'Đã lưu biên bản để chờ kết quả quyết toán cọc (Bước 3.20 / AF-01). Biên bản giữ trạng thái Nháp.');
+                    }}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold cursor-pointer"
+                  >
+                    Lưu biên bản để chờ (3.20)
+                  </button>
+                )}
+
+                {/* Bước 3.19: Ghi kết quả vào biên bản trả phòng */}
+                <button
+                  disabled={!is58Valid}
+                  onClick={() => {
+                    if (!is58Valid) {
+                      showToast('error', 'Chưa có kết quả 5.8 hợp lệ được hai bên thống nhất để ghi vào biên bản.');
+                      return;
+                    }
+                    const repId = existingReturnReport?.id || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026';
+                    syncDepositSettlementBG10(repId, {
+                      depositSettlementId: slip?.id || 'QTC-202-2026',
+                      depositSettlementVersion: 1,
+                      depositSettlementAmount: initialDeposit,
+                      depositRefundAmount: calculatedResult >= 0 ? calculatedResult : 0,
+                      depositDeductionAmount: deductionTotal,
+                      depositAdditionalDue: calculatedResult < 0 ? Math.abs(calculatedResult) : 0,
+                      depositTrackingStatus: '5.8 hợp lệ – Đã thống nhất',
+                      depositTrackingReason: 'Hai bên đã thống nhất phương án hoàn cọc ' + calculatedResult.toLocaleString('vi-VN') + 'đ'
+                    });
+                    showToast('success', 'Đã ghi kết quả đối soát cọc hợp lệ từ QT05 vào biên bản trả phòng (Bước 3.19)!');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold cursor-pointer shadow-xs ${
+                    is58Valid
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  Ghi kết quả vào biên bản (Bước 3.19)
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('final_report_bg11');
+                    showToast('info', 'Mở UC-BG11: Hoàn thiện biên bản trả phòng.');
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>Hoàn thiện biên bản (BG11)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================================
+          TAB 11: HOÀN THIỆN BIÊN BẢN TRẢ PHÒNG (UC-BG11)
+      ========================================================================= */}
+      {activeTab === 'final_report_bg11' && (() => {
+        // Evaluate the 3 distinct thresholds (BR-UC.BG.11-17)
+        // Threshold A: Mở / Xem / Lưu nháp -> always true
+        // Threshold B: Điều kiện Lưu Đã lập (Bước 2):
+        // 1. BG09 3.05 đã xác nhận
+        const is305Confirmed = Boolean(returnInspectionTarget?.step305Confirmed);
+        // 2. BG06 & BG07 đã hoàn tất
+        const isBG06BG07Done = Boolean(existingCompResult && !existingCompResult.hasPendingWork);
+        // 3. BG10 có kết quả 5.8 hợp lệ
+        const isDeposit58Synced = Boolean(existingReturnReport?.depositSettlementId || (matchingSettlementSlip?.status === 'Khách đồng ý'));
+
+        const canSaveOfficially1102 = is305Confirmed && isDeposit58Synced;
+
+        // Threshold C: Điều kiện Đã xác nhận (Bước 4 / 3.24):
+        // Report must be "Đã lập", and signed paper recorded
+        const isDraftReport = !existingReturnReport || existingReturnReport.status === 'Nháp';
+        const isEstablishedReport = Boolean(existingReturnReport && (existingReturnReport.status === 'Đã lập' || existingReturnReport.status === 'Đã xác nhận'));
+
+        // Client signed or refusal recorded
+        const clientSignRecorded = bg11TenantSigned === 'Khách đã ký' || (bg11TenantSigned === 'Khách không ký' && Boolean(bg11NotSignReason));
+        const ownerSignedOnPaper = bg11OwnerSigned;
+
+        const canConfirmFinal324 = isEstablishedReport && clientSignRecorded && ownerSignedOnPaper && canSaveOfficially1102;
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">UC-BG11</span>
+                  <h2 className="text-sm font-bold text-slate-900">Hoàn thiện biên bản trả phòng: {selectedRoomCode}</h2>
+                </div>
+                <p className="text-slate-500 mt-0.5">
+                  Biên bản được chuẩn bị và ký tay trên giấy ngoài hệ thống (BR-10). Hệ thống không có chức năng In hay ký điện tử (BR-19).
+                </p>
+              </div>
+
+              {existingReturnReport && (
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded text-xs font-bold ${
+                    existingReturnReport.status === 'Đã xác nhận'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : existingReturnReport.status === 'Đã lập'
+                      ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300'
+                  }`}>
+                    Trạng thái biên bản: {existingReturnReport.status}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 3 Distinct Thresholds Panel (BR-UC.BG.11-17) */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
+                Phân biệt 3 ngưỡng điều kiện nghiệp vụ (BR-UC.BG.11-17):
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
+                  <span className="font-bold text-slate-800 block text-[11px]">Ngưỡng A: Mở / Lưu nháp</span>
+                  <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">&bull; Luôn khả dụng để chuẩn bị trước</span>
+                  <span className="text-[10px] text-slate-400">Không cản trở ghi nhận thực tế</span>
+                </div>
+
+                <div className={`p-2.5 border rounded-lg ${canSaveOfficially1102 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <span className="font-bold text-slate-800 block text-[11px]">Ngưỡng B: Lưu ĐÃ LẬP (Bước 2)</span>
+                  <ul className="text-[10px] space-y-0.5 mt-0.5">
+                    <li className={is305Confirmed ? 'text-emerald-700 font-medium' : 'text-amber-700'}>
+                      {is305Confirmed ? '✓' : '✗'} 1. Nhận lại 3.05 đã xác nhận
+                    </li>
+                    <li className={isDeposit58Synced ? 'text-emerald-700 font-medium' : 'text-amber-700'}>
+                      {isDeposit58Synced ? '✓' : '✗'} 2. Quyết toán cọc 5.8 hợp lệ
+                    </li>
+                  </ul>
+                </div>
+
+                <div className={`p-2.5 border rounded-lg ${canConfirmFinal324 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'}`}>
+                  <span className="font-bold text-slate-800 block text-[11px]">Ngưỡng C: ĐÃ XÁC NHẬN (Bước 4)</span>
+                  <ul className="text-[10px] space-y-0.5 mt-0.5">
+                    <li className={isEstablishedReport ? 'text-emerald-700 font-medium' : 'text-slate-500'}>
+                      {isEstablishedReport ? '✓' : '✗'} 1. Biên bản ở trạng thái ĐÃ LẬP
+                    </li>
+                    <li className={clientSignRecorded && ownerSignedOnPaper ? 'text-emerald-700 font-medium' : 'text-slate-500'}>
+                      {clientSignRecorded && ownerSignedOnPaper ? '✓' : '✗'} 2. Hai bên ký giấy / ghi nhận không ký
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview of Handover Return Report */}
+            <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</h3>
+                  <h4 className="font-bold text-blue-900 text-xs">BIÊN BẢN BÀN GIAO &amp; TRẢ PHÒNG (SỐ: {existingReturnReport?.reportNumber || 'BB-TRA-' + selectedRoomCode + '-2026'})</h4>
+                </div>
+                <span className="text-[11px] font-mono text-slate-500">Ngày lập: {existingReturnReport?.date || bg08Date}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-[11px] text-slate-700">
+                <div>
+                  <strong>Bên bàn giao (Khách thuê):</strong> {existingReturnReport?.giverName || bg08Giver}
+                </div>
+                <div>
+                  <strong>Bên nhận (Chủ nhà/Quản lý):</strong> {existingReturnReport?.receiverName || bg08Receiver}
+                </div>
+                <div>
+                  <strong>Căn hộ / Phòng:</strong> {selectedRoomCode} (HĐ: {targetContract?.id || 'HD-' + selectedRoomCode})
+                </div>
+                <div>
+                  <strong>Chỉ số cuối kỳ:</strong> Điện: <strong>{bg09FinalElec} kWh</strong> · Nước: <strong>{bg09FinalWater} m³</strong>
+                </div>
+              </div>
+
+              {/* Tóm tắt quyết toán cọc */}
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-slate-800">Thông tin đối soát cọc từ Quy trình 5 (QT05 / 5.8):</span>
+                  <span className="font-mono font-bold text-emerald-700">
+                    {matchingSettlementSlip?.calculatedResult ? matchingSettlementSlip.calculatedResult.toLocaleString('vi-VN') + ' đ' : 'Chờ số liệu 5.8'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {existingReturnReport?.depositTrackingReason || 'Biên bản tham chiếu kết quả quyết toán cọc từ hợp đồng chuỗi thuê liên tục.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Ghi nhận kết quả ký giấy thực tế ngoài hệ thống (Giao diện mục 3 & 4) */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span className="font-bold text-slate-900 text-xs">
+                  Ghi nhận kết quả ký tay trên bản giấy thực tế ngoài hệ thống:
+                </span>
+                <span className="text-[10px] text-slate-500">* Không có nút In hay ký điện tử (BR-10 &amp; 19)</span>
+              </div>
+
+              {/* Khách ký hoặc không ký (BR-UC.BG.11-02 & 09 / AF-01) */}
+              <div className="space-y-2">
+                <label className="font-semibold text-slate-800 block text-[11px]">
+                  1. Tình trạng chữ ký của Khách thuê trên bản in giấy:
+                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium">
+                    <input
+                      type="radio"
+                      name="tenantSignStatus"
+                      value="Khách đã ký"
+                      checked={bg11TenantSigned === 'Khách đã ký'}
+                      onChange={() => setBg11TenantSigned('Khách đã ký')}
+                    />
+                    <span>Khách đã ký giấy (Bước 3.22 / AF-04)</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-medium text-rose-700">
+                    <input
+                      type="radio"
+                      name="tenantSignStatus"
+                      value="Khách không ký"
+                      checked={bg11TenantSigned === 'Khách không ký'}
+                      onChange={() => setBg11TenantSigned('Khách không ký')}
+                    />
+                    <span>Khách không ký (Bước 3.23 / AF-01)</span>
+                  </label>
+                </div>
+
+                {bg11TenantSigned === 'Khách không ký' && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg space-y-2 mt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-rose-900 mb-1">Lý do khách không ký:</label>
+                        <select
+                          value={bg11NotSignReason}
+                          onChange={(e) => setBg11NotSignReason(e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-rose-300 rounded bg-white text-xs"
+                        >
+                          <option value="Không cung cấp lý do">Không cung cấp lý do</option>
+                          <option value="Chưa xác định">Chưa xác định</option>
+                          <option value="Bất đồng về chi phí khấu trừ">Bất đồng về chi phí khấu trừ</option>
+                          <option value="Không có mặt tại buổi bàn giao">Không có mặt tại buổi bàn giao</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-rose-900 mb-1">Cách thức trao đổi khi từ chối ký:</label>
+                        <input
+                          type="text"
+                          value={bg11NotSignExchangeInfo}
+                          onChange={(e) => setBg11NotSignExchangeInfo(e.target.value)}
+                          placeholder="Gọi điện, gửi Zalo..."
+                          className="w-full px-2.5 py-1.5 border border-rose-300 rounded bg-white text-xs"
+                        />
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-rose-800 block">
+                      * <strong>BR-UC.BG.11-09:</strong> Chủ nhà vẫn được ký giấy và xác nhận 3.24 nếu đủ nguồn; Đã xác nhận lúc này chỉ biểu thị Chủ nhà đã xác nhận hồ sơ, KHÔNG có nghĩa khách đã ký/đồng ý tiền cọc.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Chủ nhà ký giấy */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
+                <label className="font-semibold text-slate-800 block text-[11px]">
+                  2. Xác nhận chữ ký tay của Chủ nhà trên bản in giấy:
+                </label>
+                <label className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bg11OwnerSigned}
+                    onChange={(e) => setBg11OwnerSigned(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      Chủ nhà / Quản lý đã ký tay thực tế trên bản in giấy đúng mã và phiên bản
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Tài khoản thực hiện: {currentUser?.fullName || 'Nguyễn Văn An'}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Storage & Scan */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Nơi lưu trữ bản giấy chính thức <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={bg11PaperLocation}
+                    onChange={(e) => setBg11PaperLocation(e.target.value)}
+                    placeholder="Ví dụ: Tủ hồ sơ Tầng 1..."
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tệp scan hoặc ảnh bản giấy đã ký (tùy chọn)</label>
+                  <input
+                    type="text"
+                    value={bg11ScanUrl}
+                    onChange={(e) => setBg11ScanUrl(e.target.value)}
+                    placeholder="https://... (không bắt buộc tải ảnh chữ ký)"
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons (Giao diện mục 5) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setActiveTab('deposit_check_bg10')}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                &larr; Xem đối soát cọc BG10
+              </button>
+
+              <div className="flex items-center gap-2">
+                {/* Lưu nháp */}
+                <button
+                  onClick={() => {
+                    const rep: HandoverReturnReport = {
+                      id: existingReturnReport?.id || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026',
+                      reportNumber: existingReturnReport?.reportNumber || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026',
+                      roomCode: selectedRoomCode,
+                      leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      contractId: targetContract?.id || 'HD-' + selectedRoomCode + '-2026',
+                      status: 'Nháp',
+                      date: bg08Date,
+                      giverName: bg08Giver,
+                      receiverName: bg08Receiver,
+                      tenantSignedPaper: bg11TenantSigned,
+                      tenantNotSignReason: bg11TenantSigned === 'Khách không ký' ? bg11NotSignReason : undefined,
+                      tenantNotSignExchangeInfo: bg11TenantSigned === 'Khách không ký' ? bg11NotSignExchangeInfo : undefined,
+                      ownerSignedPaper: bg11OwnerSigned ? 'Đã ký' : 'Chưa ký',
+                      paperLocation: bg11PaperLocation,
+                      signedDocumentScanUrl: bg11ScanUrl,
+                      reviewRequired: false,
+                      version: (existingReturnReport?.version || 1),
+                      createdAt: existingReturnReport?.createdAt || new Date().toISOString()
+                    };
+                    saveHandoverReturnReportBG11(rep);
+                    showToast('info', 'Đã lưu nháp biên bản trả phòng.');
+                  }}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold cursor-pointer"
+                >
+                  Lưu nháp biên bản
+                </button>
+
+                {/* Lưu Đã lập (Bước 2) */}
+                <button
+                  disabled={!canSaveOfficially1102}
+                  onClick={() => {
+                    if (!canSaveOfficially1102) {
+                      showToast('error', 'Chưa đủ điều kiện Ngưỡng B (nhận lại 3.05 và quyết toán cọc 5.8) để Lưu Đã lập.');
+                      return;
+                    }
+
+                    const establishedRep: HandoverReturnReport = {
+                      id: existingReturnReport?.id || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026',
+                      reportNumber: existingReturnReport?.reportNumber || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026',
+                      roomCode: selectedRoomCode,
+                      leaseId: targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                      contractId: targetContract?.id || 'HD-' + selectedRoomCode + '-2026',
+                      status: 'Đã lập',
+                      date: bg08Date,
+                      giverName: bg08Giver,
+                      receiverName: bg08Receiver,
+                      tenantSignedPaper: bg11TenantSigned,
+                      tenantNotSignReason: bg11TenantSigned === 'Khách không ký' ? bg11NotSignReason : undefined,
+                      tenantNotSignExchangeInfo: bg11TenantSigned === 'Khách không ký' ? bg11NotSignExchangeInfo : undefined,
+                      ownerSignedPaper: bg11OwnerSigned ? 'Đã ký' : 'Chưa ký',
+                      paperLocation: bg11PaperLocation,
+                      signedDocumentScanUrl: bg11ScanUrl,
+                      depositSettlementId: matchingSettlementSlip?.id || 'QTC-202-2026',
+                      depositSettlementAmount: matchingSettlementSlip?.initialDepositAmount || 3800000,
+                      depositRefundAmount: matchingSettlementSlip?.calculatedResult || 3350000,
+                      depositTrackingStatus: '5.8 hợp lệ – Đã thống nhất',
+                      reviewRequired: false,
+                      version: (existingReturnReport?.version || 1),
+                      createdAt: existingReturnReport?.createdAt || new Date().toISOString()
+                    };
+
+                    saveHandoverReturnReportBG11(establishedRep);
+                    showToast('success', 'Đã lưu biên bản ở trạng thái ĐÃ LẬP (Bước 2)! Bản giấy sẵn sàng để in và ký ngoài hệ thống.');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold cursor-pointer shadow-xs ${
+                    canSaveOfficially1102
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  Lưu Đã lập (Bước 2)
+                </button>
+
+                {/* Xác nhận hoàn tất (Bước 4 / 3.24) */}
+                <button
+                  disabled={!canConfirmFinal324}
+                  onClick={() => {
+                    if (!canConfirmFinal324) {
+                      showToast('error', 'EF-04: Chưa đủ điều kiện xác nhận 3.24 (cần trạng thái Đã lập, ghi nhận ký giấy thực tế và Chủ nhà ký).');
+                      return;
+                    }
+                    const repId = existingReturnReport?.id || 'BB-TRA-' + selectedRoomCode.replace(/\D/g, '') + '-2026';
+                    const res = confirmFinalReturnReportBG11(
+                      repId,
+                      bg11TenantSigned,
+                      bg11TenantSigned === 'Khách không ký' ? bg11NotSignReason : undefined,
+                      bg11TenantSigned === 'Khách không ký' ? bg11NotSignExchangeInfo : undefined,
+                      bg11PaperLocation,
+                      bg11ScanUrl
+                    );
+                    if (res.success) {
+                      showToast('success', res.message);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold cursor-pointer shadow-xs flex items-center gap-1.5 ${
+                    canConfirmFinal324
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <FileCheck2 className="w-4 h-4" />
+                  <span>Xác nhận hoàn tất (Bước 3.24)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================================
+          MODAL: THÊM LƯỢT LIÊN HỆ THỰC TẾ (AF-04 / UC-BG07)
+      ========================================================================= */}
+      {showAddContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Ghi nhận lượt liên hệ khách thuê (AF-04)</h3>
+              </div>
+              <button
+                onClick={() => setShowAddContactModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Thời điểm liên hệ thực tế</label>
+                <input
+                  type="datetime-local"
+                  value={newContactDate}
+                  onChange={(e) => setNewContactDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Kênh liên hệ</label>
+                  <select
+                    value={newContactChannel}
+                    onChange={(e) => setNewContactChannel(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium"
+                  >
+                    <option value="Zalo">Zalo</option>
+                    <option value="Điện thoại">Điện thoại</option>
+                    <option value="Trực tiếp">Trực tiếp</option>
+                    <option value="Khác">Khác</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Người liên hệ</label>
+                  <input
+                    type="text"
+                    value={newContactCaller}
+                    onChange={(e) => setNewContactCaller(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Kết quả cuộc gọi / trao đổi <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={newContactResult}
+                  onChange={(e) => setNewContactResult(e.target.value)}
+                  placeholder="Ví dụ: Gọi không nghe máy / Khách hẹn gọi lại sau..."
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Mô tả bằng chứng (ảnh chụp màn hình, lịch sử cuộc gọi)</label>
+                <input
+                  type="text"
+                  value={newContactEvidence}
+                  onChange={(e) => setNewContactEvidence(e.target.value)}
+                  placeholder="Ví dụ: Ảnh chụp màn hình 3 cuộc gọi nhỡ lúc 14h..."
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setShowAddContactModal(false)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  if (!newContactResult.trim()) {
+                    showToast('error', 'Vui lòng nhập kết quả cuộc gọi / liên hệ.');
+                    return;
+                  }
+                  const logItem = {
+                    id: 'log_' + Date.now(),
+                    date: newContactDate,
+                    channel: newContactChannel,
+                    caller: newContactCaller,
+                    result: newContactResult,
+                    evidence: newContactEvidence || 'Đã ghi nhận trong nhật ký liên hệ'
+                  };
+                  setBg07ContactLogs(prev => [logItem, ...prev]);
+                  showToast('success', 'Đã ghi nhận thêm một lượt liên hệ thực tế thành công!');
+                  setShowAddContactModal(false);
+                  setNewContactResult('');
+                  setNewContactEvidence('');
+                }}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold cursor-pointer"
+              >
+                Lưu lượt liên hệ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: ĐÍNH CHÍNH XÁC NHẬN 3.05 (BR-UC.BG.09-05 & 06 & 12)
+      ========================================================================= */}
+      {showCorrectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Đính chính kết quả nhận lại phòng 3.05</h3>
+              </div>
+              <button
+                onClick={() => setShowCorrectionModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-slate-600">
+              Quy tắc BR-09-05: Không sửa/xóa lặng lẽ. Đính chính phải tạo phiên bản mới trạng thái <em>Đính chính chờ xác nhận</em>, ghi rõ lý do và chứng cứ để kiểm tra sai lệch.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Trạng thái nhận lại mới</label>
+                <select
+                  value={correctionNewStatus}
+                  onChange={(e) => setCorrectionNewStatus(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-bold"
+                >
+                  <option value="Chưa nhận lại">Chưa nhận lại (Đảo từ Đã nhận lại &rarr; Chưa nhận lại)</option>
+                  <option value="Đã nhận lại">Đã nhận lại (Bổ sung đủ kiểm tra)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Lý do đính chính <span className="text-red-500">*</span></label>
+                <textarea
+                  rows={2}
+                  value={correctionReason}
+                  onChange={(e) => setCorrectionReason(e.target.value)}
+                  placeholder="Ví dụ: Phát hiện còn sót chìa khóa phòng kho khách chưa giao..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Bằng chứng đính chính <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={correctionEvidence}
+                  onChange={(e) => setCorrectionEvidence(e.target.value)}
+                  placeholder="Biên bản làm việc bổ sung..."
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setShowCorrectionModal(false)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  if (!correctionReason.trim() || !correctionEvidence.trim()) {
+                    showToast('error', 'Vui lòng nhập lý do và bằng chứng đính chính.');
+                    return;
+                  }
+                  correctReturnInspectionStep305(
+                    selectedRoomCode,
+                    targetContract?.leaseId || selectedRoom.currentLeaseId || 'THUE-' + selectedRoomCode + '-L1',
+                    correctionNewStatus,
+                    correctionReason,
+                    correctionEvidence
+                  );
+                  showToast('success', 'Đã ghi nhận phiên bản đính chính 3.05 mới có lịch sử và phát thông báo sai lệch cần xử lý!');
+                  setShowCorrectionModal(false);
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold cursor-pointer"
+              >
+                Xác nhận đính chính
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           MODAL: BỔ SUNG TÀI SẢN VÀO DANH SÁCH KIỂM KÊ (AF-01 / UC-BG01)

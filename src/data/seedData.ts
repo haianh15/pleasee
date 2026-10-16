@@ -1130,6 +1130,7 @@ export const INITIAL_RETURN_INSPECTIONS: ReturnInspection[] = [
     finalElectricityKwh: 2890,
     finalWaterM3: 98,
     assetsCheckedFully: true,
+    version: 1,
     items: INITIAL_STANDARD_ASSETS.map((ast) => ({
       name: ast.name,
       inspected: true,

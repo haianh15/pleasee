@@ -347,16 +347,23 @@ export interface ReturnInspection {
   id: string;
   roomCode: string;
   leaseId: string;
+  contractId?: string;
   inspectionDate: string;
   step304Status: 'Đã nhận lại' | 'Chưa nhận lại' | 'Chưa có kết quả';
   step305Confirmed: boolean; // Chủ nhà xác nhận độc lập tại 3.05
   step305ConfirmedAt?: string;
   step305ConfirmedBy?: string;
   step305Evidence?: string;
+  step305EvidencePhotos?: string[];
+  step305EvidenceVideoUrl?: string;
   finalElectricityKwh?: number;
   finalWaterM3?: number;
   assetsCheckedFully: boolean;
   incompleteReason?: string;
+  isDraft?: boolean;
+  correctionStatus?: 'Bình thường' | 'Đính chính chờ xác nhận' | 'Sai lệch cần xử lý';
+  correctionNote?: string;
+  version: number;
   items: {
     name: string;
     inspected: boolean;
@@ -387,16 +394,34 @@ export interface AssetComparisonResult {
   id: string;
   roomCode: string;
   leaseId: string;
-  hasDifference: boolean; // Từ BG06
-  hasPendingWork: boolean; // Còn nội dung cần xử lý?
-  pendingWorkNote?: string;
-  solutionPlan?: string;
-  ownerOpinion?: string;
-  tenantOpinion?: string;
+  contractId?: string;
+  hasDifference: boolean; // Từ BG06 (chỉ xem, không sửa)
+  hasPendingWork: boolean; // Còn nội dung cần xử lý? (Có / Không)
+  pendingWorkNote?: string; // Nội dung phát sinh hoặc căn cứ đã xử lý
+  solutionPlan?: string; // Phương án xử lý
+  ownerOpinion?: string; // Ý kiến Chủ nhà
+  tenantOpinion?: string; // Ý kiến khách thuê do User ghi lại
   tenantFeedbackStatus: 'Đã phản hồi' | 'Chưa phản hồi' | 'Không liên hệ được';
   unanimousStatus: 'Đã thống nhất' | 'Chưa thống nhất' | 'Chưa xác định';
-  compensationAmount?: number;
-  transferredToSettlement318: boolean;
+  contactHistory?: {
+    id: string;
+    date: string;
+    channel: 'Zalo' | 'Điện thoại' | 'Trực tiếp' | 'Khác';
+    caller: string;
+    result: string;
+    evidence: string;
+  }[];
+  contactEvidence?: string;
+  contactAttemptsCount?: number;
+  firstContactAt?: string;
+  unreachableConfirmedAt?: string;
+  unreachableConfirmedBy?: string;
+  compensationAmount?: number; // Chi phí bồi thường tham khảo (User ghi nhận)
+  transferredToSettlement318: boolean; // Chủ nhà chuyển thông tin sang QT05 tại 3.18 ngoài hệ thống
+  transferredAt?: string;
+  settlementCaseId?: string;
+  bg05AuditStamp?: string; // Dấu tra cứu BG05
+  version: number;
   loggedAt: string;
 }
 
@@ -407,13 +432,33 @@ export interface HandoverReturnReport {
   leaseId: string;
   contractId: string;
   status: 'Nháp' | 'Đã lập' | 'Đã xác nhận';
+  missingReceiveReport?: boolean; // Cờ thiếu biên bản nhận BG03 (BR-UC.BG.08-01 & 05)
+  initialConditionNotes?: string;
+  handoverPlace?: string;
+  date: string;
+  giverName: string; // Bên bàn giao (Khách)
+  receiverName: string; // Bên nhận (Chủ nhà)
+  paperLocation?: string;
+  signedDocumentScanUrl?: string;
   tenantSignedPaper: 'Khách đã ký' | 'Chưa ký' | 'Khách không ký';
   tenantNotSignReason?: string;
+  tenantNotSignExchangeInfo?: string;
   ownerSignedPaper: 'Đã ký' | 'Chưa ký';
-  reviewRequired: boolean;
+  reviewRequired: boolean; // Cờ Cần rà soát khi nguồn thay đổi
+  reviewReason?: string;
+  waitingReason?: string; // Lý do chờ quyết toán cọc hoặc nguồn
+  depositSettlementId?: string; // Mã kết quả QT05 (5.8)
+  depositSettlementVersion?: number;
+  depositSettlementAmount?: number; // Cọc ban đầu
+  depositRefundAmount?: number; // Số hoàn lại
+  depositDeductionAmount?: number; // Khấu trừ
+  depositAdditionalDue?: number; // Thu thêm
+  depositTrackingStatus?: 'Chưa có 5.8/Chờ quyết toán' | '5.8 hợp lệ – Đã thống nhất' | 'Chưa thống nhất – Chờ xác nhận của khách' | 'Tranh chấp – Chờ xử lý' | 'Đã ghi kết quả vào biên bản' | 'Cần rà soát phiên bản';
+  depositTrackingReason?: string;
   version: number;
   createdAt: string;
   confirmedAt?: string;
+  confirmedBy?: string;
 }
 
 // ==================== QUY TRÌNH 03: HỒ SƠ KHÁCH THUÊ ====================
